@@ -1,10 +1,10 @@
-# 🌿 Sage Package Manager Specification & Design Document (神宸 Linux 软件管理系统全量设计规范)
+# 🌿 Sage Package Manager Technical Specification & Architecture Reference
 
 **Version:** 2.0  
 **Status:** Approved  
 **Language Standards:** Modern C++20 (100% C++20 Modules `.cppm`)  
 **Build System:** xmake  
-**Target Platform:** ShenChen Linux (sclinux / Native XFS Root)
+**Target Platform:** Linux (FHS Compliant / POSIX Native)
 
 ---
 
@@ -28,13 +28,13 @@
 
 ## 1. 项目愿景与核心架构哲学
 
-**Sage（神宸包管理器底层核心）** 是一个采用现代 C++20 从零编写的高性能、模块化、多层通用 Linux 软件管理系统。
+**Sage** 是一个采用现代 C++20 从零编写的高性能、模块化、多层通用 Linux 软件管理系统。
 
 ### 核心架构支柱：
 * **⚡ 极致性能与零拷贝 (Zero-Copy)**：依托 **LMDB** 内存映射 B+ 树实现纳秒级包元数据查询与写入时的 Copy-on-Write ACID 事务安全。
 * **🌐 通用多层 Channel 体系**：无缝管理系统根层 (`/`)、共享运行时 (`/usr/lib/runtimes`)、隔离工具链 (`/opt/channels`) 以及用户级应用 (`~/.local`)，并通过 Profile 聚合严格遵循 FHS 标准。
 * **🎛️ 绝对系统主权与极简虚拟接口**：将虚拟提供者收敛于互斥大件（`virtual/init`, `virtual/udev`, `virtual/libc`），内核、Shell、Awk、Coreutils 等作为天然共存组件管理，消除冗余抽象。
-* **🔄 声明式系统重构 (`sage rebuild` / `shc rebuild`)**：自动对比 `/etc/distro/system.toml` 与 LMDB 活动状态，执行底层组件的原子置换并重新生成全系统服务脚本。
+* **🔄 声明式系统重构 (`sage rebuild`)**：自动对比 `/etc/distro/system.toml` 与 LMDB 活动状态，执行底层组件的原子置换并重新生成全系统服务脚本。
 * **🔌 通用服务规范 (`service.toml`)**：采用与 Init 解耦的声明格式，一键自动编译生成 OpenRC、Runit、Systemd、Dinit、s6 原生服务脚本。
 * **🧩 原生 PubGrub / CDCL SAT 求解器**：无任何外部 SAT 求解库依赖，数学完备求解版本区间与 SONAME 依赖，提供因果树冲突诊断。
 * **🛡️ 100% C++20 Modules 与 RAII 内存安全**：业务代码零传统头文件污染，系统动态链接于 `liblmdb`、`libzstd`、`libtomlplusplus` 与 `libcurl`。
@@ -84,7 +84,7 @@ graph TB
 
 ## 3. LMDB 零拷贝状态存储引擎与 Schema
 
-状态数据库存储于 `/var/lib/distro/data.mdb`（或 `/var/lib/shc/data.mdb`），利用专用命名数据库（DBI Table）管理状态：
+状态数据库存储于 `/var/lib/distro/data.mdb`，利用专用命名数据库（DBI Table）管理状态：
 
 | 表名 (DBI) | 键 (Key) | 值 (Value) | 职责与作用 |
 | :--- | :--- | :--- | :--- |
@@ -145,7 +145,7 @@ Sage 引入多层 Channel 运行时模型，打破传统发行版“单一 RootF
 
 ## 7. 声明式系统重构与通用服务规范
 
-### 1. 声明式系统重构 (`sage rebuild` / `shc rebuild`)
+### 1. 声明式系统重构 (`sage rebuild`)
 - 配置文件路径：`/etc/distro/system.toml`
 - 配置文件示例：
   ```toml
@@ -198,7 +198,6 @@ group = "root"
 
 ```
 sage [全局选项] <子命令> [参数...]
-（在神宸系统中可简写为 shc）
 ```
 
 ### 全局选项
@@ -211,7 +210,7 @@ sage [全局选项] <子命令> [参数...]
 
 ### 子命令详解
 
-#### `sage install <PKG...>` (简写: `shc in`)
+#### `sage install <PKG...>`
 ```bash
 # 安装软件包到系统根通道
 sage install ripgrep neovim
@@ -223,13 +222,13 @@ sage install --channel python312 python
 sage install --dry-run waybar
 ```
 
-#### `sage remove <PKG...>` (简写: `shc rm`)
+#### `sage remove <PKG...>`
 ```bash
 # 卸载软件包并清理关联服务
 sage remove nginx
 ```
 
-#### `sage rebuild` (简写: `shc rebuild` / `shc rb`)
+#### `sage rebuild`
 ```bash
 # 演练系统声明式对齐变动
 sage rebuild --dry-run
@@ -238,7 +237,7 @@ sage rebuild --dry-run
 sage rebuild
 ```
 
-#### `sage channel [list|add|remove|sync]` (简写: `shc channel`)
+#### `sage channel [list|add|remove|sync]`
 ```bash
 # 查看所有激活的 Channel 与优先级
 sage channel list
@@ -251,13 +250,13 @@ sage channel add rust-nightly https://pkg.distro.org/rust --scope toolchain --pr
 sage channel sync
 ```
 
-#### `sage build <RECIPE_DIR>` (简写: `shc build`)
+#### `sage build <RECIPE_DIR>`
 ```bash
 # 从 recipe.toml 构建二进制包
 sage build ./recipes/ripgrep
 ```
 
-#### `sage query [installed|info|files|owner]` (简写: `shc q` / `shc query`)
+#### `sage query [installed|info|files|owner]`
 ```bash
 # 查询已安装软件包列表
 sage query installed
@@ -272,7 +271,7 @@ sage query files ripgrep
 sage query owner /usr/bin/rg
 ```
 
-#### `sage service [list|status|generate]` (简写: `shc service`)
+#### `sage service [list|status|generate]`
 ```bash
 # 列出所有安装的守护进程服务
 sage service list
