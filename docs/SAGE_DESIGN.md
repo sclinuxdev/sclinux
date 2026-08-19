@@ -4,7 +4,8 @@
 **Status:** Approved  
 **Language Standards:** Modern C++20 (100% C++20 Modules `.cppm`)  
 **Build System:** xmake  
-**Target Platform:** Linux (FHS Compliant / POSIX Native)
+**Target Platform:** Linux (FHS Compliant / POSIX Native)  
+**Upstream Repository:** [https://github.com/antinomie1/sage](https://github.com/antinomie1/sage)
 
 ---
 
