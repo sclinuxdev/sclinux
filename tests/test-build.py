@@ -438,6 +438,12 @@ def main() -> int:
             (wrapper_root.parent / "xmake-bin/xmake").is_file(),
             True,
         )
+        xmake_wrapper = (wrapper_root.parent / "xmake-bin/xmake").read_text()
+        failed += not check(
+            "Stage1 xmake wrapper preserves its installed module root",
+            f"--argv0 {xmake_binary} " in xmake_wrapper,
+            True,
+        )
         wrapper = (wrapper_root / "pkgconf").read_text()
         failed += not check(
             "Stage1 tool wrappers do not leak target libraries to child processes",

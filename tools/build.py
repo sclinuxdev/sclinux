@@ -726,11 +726,14 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 interpreter_options = "".join(
                     f" -I{shlex.quote(str(path))}" for path in stage1_perl_module_paths(sysroot)
                 )
+            argv0 = (
+                shlex.quote(str(executable)) if wrapper_name == "xmake-bin" else '"$0"'
+            )
             wrapper.write_text(
                 "#!/bin/sh\n"
                 f"exec {shlex.quote(stage1_dynamic_loader(architecture, sysroot))} "
                 f"--library-path {shlex.quote(library_path)} "
-                '--argv0 "$0" '
+                f"--argv0 {argv0} "
                 f"{shlex.quote(str(executable))}{interpreter_options} \"$@\"\n"
             )
             wrapper.chmod(0o755)
