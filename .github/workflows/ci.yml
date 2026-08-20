@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # scripts/shc is shipped as /usr/bin/shc, so a broken alias table is a
+      # broken system command. The suite asserts the exact argument vector
+      # handed to sage, including that aliases expand only in the subcommand
+      # position -- a package named `rm` must survive `sage install rm`.
+      - name: shc wrapper behaviour
+        run: sh tests/test-shc.sh
+
+      - name: shell lint
+        run: shellcheck -s sh scripts/shc tests/test-shc.sh
+
+      # Field names and types are checked against what sage's parse_toml
+      # actually reads; an unknown key is silently ignored by sage, so it is
+      # almost always a typo.
+      - name: recipe schema
+        run: python3 tests/validate-recipes.py
+
+      - name: markdown links and anchors
+        run: python3 tests/check-links.py
