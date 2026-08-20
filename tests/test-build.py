@@ -413,6 +413,12 @@ def main() -> int:
         sysroot_binary.chmod(0o755)
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
         (sysroot_binary.parent / "perl").symlink_to("pkgconf")
+        xmake_binary = (
+            sysroot_library.parents[1] / "opt/channels/xmake/3/bin/xmake"
+        )
+        xmake_binary.parent.mkdir(parents=True)
+        xmake_binary.write_bytes(b"\x7fELFfixture")
+        xmake_binary.chmod(0o755)
         perl_root = sysroot_library / "perl5/5.44/core_perl"
         (perl_root / "CORE").mkdir(parents=True)
         autoconf_modules = sysroot_library.parent / "share/autoconf"
@@ -426,6 +432,11 @@ def main() -> int:
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
             ["perl", "pkg-config", "pkgconf"],
+        )
+        failed += not check(
+            "Stage1 exposes the locked xmake channel through a target wrapper",
+            (wrapper_root.parent / "xmake-bin/xmake").is_file(),
+            True,
         )
         wrapper = (wrapper_root / "pkgconf").read_text()
         failed += not check(

@@ -543,8 +543,10 @@ def stage1_build_environment(
             [
                 str(wrappers / "usr-bin"),
                 str(wrappers / "usr-sbin"),
+                str(wrappers / "xmake-bin"),
                 str(usr / "bin"),
                 str(usr / "sbin"),
+                str(sysroot / "opt/channels/xmake/3/bin"),
                 str(sysroot / "bin"),
                 str(sysroot / "sbin"),
             ],
@@ -690,7 +692,11 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     shutil.rmtree(wrapper_root, ignore_errors=True)
     resolved_sysroot = sysroot.resolve()
     library_path = ":".join(str(path) for path in stage1_runtime_library_paths(sysroot))
-    for relative, wrapper_name in (("usr/bin", "usr-bin"), ("usr/sbin", "usr-sbin")):
+    for relative, wrapper_name in (
+        ("usr/bin", "usr-bin"),
+        ("usr/sbin", "usr-sbin"),
+        ("opt/channels/xmake/3/bin", "xmake-bin"),
+    ):
         source = sysroot / relative
         if not source.is_dir():
             continue
