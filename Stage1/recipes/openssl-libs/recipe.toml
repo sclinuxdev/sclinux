@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "openssl-libs"
 version = "4.0.1"
-release = "1"
+release = "2"
 description = "libssl/libcrypto shared libraries"
 license = "Apache-2.0"
 channel = "system"
@@ -32,7 +32,7 @@ prepare = [
 ]
 
 build = [
-    "./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic no-apps enable-deprecated enable-tls1-method enable-tls1_1-method",
+    "PERL=/usr/bin/perl ./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic no-apps enable-deprecated enable-tls1-method enable-tls1_1-method",
     "make -j$(nproc)",
 ]
 
