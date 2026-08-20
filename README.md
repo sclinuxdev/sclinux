@@ -75,7 +75,8 @@
 ## ✨ 核心特性 (Key Features)
 
 - 🧱 **XFS 联盟正统血脉 (Pure XFS Root)**
-  - 默认全盘格式化为高性能 XFS 文件系统，彻底杜绝 CoW 带来的虚拟机磁盘碎片化与 I/O 暴跌地狱，筑牢物理信号锚点。
+  - 除 UEFI 规范强制为 FAT32 的 ESP 外，全盘格式化为高性能 XFS，彻底杜绝 CoW 带来的虚拟机磁盘碎片化与 I/O 暴跌地狱，筑牢物理信号锚点。
+  - 底层垫一层 **LVM thin**，把 CoW 严格关进快照层——日常写入走裸 XFS 零污染，`shc rebuild` 翻车时仍有块级快照可退。详见 [安装规范与磁盘布局设计](docs/INSTALLATION.md)。
 - 🌿 **`shc(Sage)` 信号主权包管理系统**
   - 基于 Modern C++23 模块（C++23 Modules）纯自研架构，搭载 LMDB 零拷贝内存映射 B+ 树与 PubGrub SAT 求解器，提供纳秒级查询、多层 Channel 隔离与一键声明式重构。
 - 🎮 **`wmdx` 次世代图形渲染栈**
@@ -172,6 +173,8 @@ shc status --full
   *官方代码仓库*。Sage 软件包管理器的独立开源实现与最新 C++23 代码（上游以 BSD 2-Clause 协议单独发布）。
 - 🌿 [**shc(Sage) 软件管理系统技术规范文档 (`docs/SAGE_DESIGN.md`)**](docs/SAGE_DESIGN.md)  
   *纯技术文档（无狼王设定）*。包含完整 5 层架构、LMDB 存储表 Schema、`*.pkg.tar.zst` 流式解包、Multi-Init 映射、PubGrub SAT 算法、CLI 完整规范、C++23 模块 DAG 与 5 大工程铁律。
+- 🧱 [**安装规范与磁盘布局设计 (`docs/INSTALLATION.md`)**](docs/INSTALLATION.md)  
+  *纯技术文档（无狼王设定）*。XFS on LVM thin 的选型论证、GPT 分区布局、引导器选型（含 GRUB 读不了 thin volume 的约束）、thin pool 元数据防守、快照回滚流程与当前阻塞项清单。
 - 🐾 [**浩宸宇宙：狼王与信号场设定集 (`docs/浩宸宇宙_狼王与信号场设定集.md`)**](docs/浩宸宇宙_狼王与信号场设定集.md)  
   *世界观设定集*。包含苏浩宸、奶龙火种、月狼血脉、七节点试炼、边界守卫、红眼观察者与终焉狼庭的完整宇宙观设定。
 
