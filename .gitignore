@@ -1,0 +1,37 @@
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ---- Editors / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- xmake ----
+.xmake/
+build/
+compile_commands.json
+
+# ---- C/C++ build artifacts ----
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.d
+*.gcda
+*.gcno
+
+# ---- C++20/23 module artifacts ----
+*.pcm
+*.gcm
+*.ifc
+
+# ---- Sage package artifacts ----
+*.pkg.tar.zst
+*.mdb
