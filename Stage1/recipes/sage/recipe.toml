@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "5"
+release = "6"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
@@ -26,6 +26,7 @@ provides = [
 ]
 
 prepare = [
+    "patch -p1 < \"$RECIPE_DIR/sage-reproducible-archives.patch\"",
 ]
 
 build = [

@@ -108,8 +108,15 @@ def main() -> int:
         sorted(seed["packages"]),
     )
     containerfile = (REPO / "Stage0" / "Containerfile").read_text()
-    forbidden = [line for line in containerfile.splitlines() if line.startswith(("COPY ", "ADD "))]
-    failed += not check("Stage0 never copies the repository into its seed", forbidden, [])
+    copied = [line for line in containerfile.splitlines() if line.startswith(("COPY ", "ADD "))]
+    failed += not check(
+        "Stage0 copies only the audited Sage reproducibility patch",
+        copied,
+        [
+            "COPY Stage1/recipes/sage/sage-reproducible-archives.patch "
+            "/tmp/sage-reproducible-archives.patch"
+        ],
+    )
     failed += not check(
         "Stage0 allows xmake inside the root-owned build container",
         "XMAKE_ROOT=y" in containerfile,
@@ -123,6 +130,11 @@ def main() -> int:
     failed += not check(
         "Stage0 verifies the Sage source before building it",
         "sha256sum --check --strict" in containerfile,
+        True,
+    )
+    failed += not check(
+        "Stage0 applies the Sage reproducibility patch",
+        "patch -p1 < /tmp/sage-reproducible-archives.patch" in containerfile,
         True,
     )
 
@@ -202,6 +214,11 @@ def main() -> int:
             "Stage1 renderer preserves the locked Sage checksum",
             rendered["source"]["sha256"],
             canonical["source"]["sha256"],
+        )
+        failed += not check(
+            "Stage1 Sage applies the same reproducibility patch",
+            rendered["package"]["prepare"],
+            ['patch -p1 < "$RECIPE_DIR/sage-reproducible-archives.patch"'],
         )
         failed += not check(
             "canonical Stage1 recipes remain architecture-neutral",
@@ -403,7 +420,7 @@ def main() -> int:
         [],
     )
 
-    total = 48
+    total = 50
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

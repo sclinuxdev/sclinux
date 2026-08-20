@@ -43,6 +43,8 @@ RUN set -eu; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
+COPY Stage1/recipes/sage/sage-reproducible-archives.patch /tmp/sage-reproducible-archives.patch
+
 RUN set -eu; \
     test -n "${SAGE_URL}"; \
     test -n "${SAGE_SHA256}"; \
@@ -51,10 +53,11 @@ RUN set -eu; \
     mkdir /tmp/sage-src; \
     tar -xzf /tmp/sage.tar.gz --strip-components=1 -C /tmp/sage-src; \
     cd /tmp/sage-src; \
+    patch -p1 < /tmp/sage-reproducible-archives.patch; \
     xmake f -c -m release -y; \
     xmake -y; \
     xmake install -o /usr -y; \
     /usr/bin/sage --version; \
-    rm -rf /tmp/sage-src /tmp/sage.tar.gz
+    rm -rf /tmp/sage-src /tmp/sage.tar.gz /tmp/sage-reproducible-archives.patch
 
 WORKDIR /build

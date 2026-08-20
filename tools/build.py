@@ -576,7 +576,7 @@ def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str
         f"SAGE_URL={sage['url']}",
         "--build-arg",
         f"SAGE_SHA256={sage['sha256']}",
-        str(REPO / "Stage0"),
+        str(REPO),
     ]
 
 
