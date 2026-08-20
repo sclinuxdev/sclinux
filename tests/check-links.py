@@ -17,7 +17,9 @@ SKIP_DIRS = {".git", ".github", "node_modules"}
 
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*$", re.MULTILINE)
-FENCE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+# Both fence styles, and the closing fence must match the opening one so a
+# ``` inside a ~~~ block does not terminate it early.
+FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
 
 
 def slug(heading: str) -> str:

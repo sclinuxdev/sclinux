@@ -30,6 +30,25 @@ def main() -> int:
             ),
             ["README.md"],
         ),
+        (
+            "links inside tilde-fenced code blocks are ignored",
+            checker.links_of(
+                "~~~markdown\n[example](missing.md)\n~~~\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "a backtick fence inside a tilde block does not close it early",
+            checker.links_of(
+                "~~~\n```\n[example](missing.md)\n```\n~~~\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "headings inside tilde-fenced blocks are not headings",
+            checker.anchors_of("~~~\n# Fake\n~~~\n# Real\n"),
+            {"real"},
+        ),
     ]
 
     failed = 0
