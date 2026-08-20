@@ -555,6 +555,9 @@ def stage1_build_environment(
                 if path.is_dir()
             ]
             prepend_environment(environment, "PERL5LIB", [str(path) for path in perl_paths])
+        autoconf_modules = usr / "share/autoconf"
+        if autoconf_modules.is_dir():
+            environment["autom4te_perllibdir"] = str(autoconf_modules)
         prepend_environment(
             environment,
             "CPPFLAGS",
@@ -628,6 +631,24 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         return
     for archive in library_root.rglob("*.la"):
         archive.unlink()
+
+
+def validate_stage1_package_shebangs(recipe_dir: Path, forbidden_roots: list[Path]) -> None:
+    package_root = recipe_dir / "pkg"
+    forbidden = {
+        os.fsencode(str(candidate))
+        for root in forbidden_roots
+        for candidate in (root, root.resolve())
+    }
+    if not package_root.is_dir():
+        return
+    for path in package_root.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        with path.open("rb") as stream:
+            first_line = stream.readline(4096)
+        if first_line.startswith(b"#!") and any(root in first_line for root in forbidden):
+            raise ConfigError(f"Stage1 package shebang contains a build path: {path}")
 
 
 def stage1_dynamic_loader(architecture: dict[str, str]) -> str:
@@ -710,6 +731,7 @@ def run_stage1_packages(
             )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ConfigError(f"Stage1 package build failed: {name}: {exc}") from exc
+        validate_stage1_package_shebangs(recipe_path.parent, [workspace, sysroot])
         entry = stage1_package_entry(name, recipe_path, architecture)
         if entry is None:
             raise ConfigError(f"Stage1 package artifact is missing after build: {name}")

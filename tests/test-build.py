@@ -390,6 +390,8 @@ def main() -> int:
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
         perl_root = sysroot_library / "perl5/5.44/core_perl"
         (perl_root / "CORE").mkdir(parents=True)
+        autoconf_modules = sysroot_library.parent / "share/autoconf"
+        autoconf_modules.mkdir(parents=True)
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
         )
@@ -418,6 +420,28 @@ def main() -> int:
             "Stage1 interpreters locate modules inside the isolated sysroot",
             interpreter_environment["PERL5LIB"].split(":")[0],
             str(perl_root),
+        )
+        failed += not check(
+            "Stage1 scripts locate Autoconf modules inside the isolated sysroot",
+            interpreter_environment["autom4te_perllibdir"],
+            str(autoconf_modules),
+        )
+
+        leaking_script = fixture_recipe.parent / "pkg/usr/bin/leak"
+        leaking_script.parent.mkdir(parents=True)
+        leaking_script.write_text(f"#! {sysroot_binary}\n")
+        try:
+            build.validate_stage1_package_shebangs(
+                fixture_recipe.parent, [sysroot_library.parents[1]]
+            )
+        except build.ConfigError as exc:
+            shebang_error = str(exc)
+        else:
+            shebang_error = "no error"
+        failed += not check(
+            "Stage1 rejects package shebangs that retain temporary build paths",
+            "shebang contains a build path" in shebang_error,
+            True,
         )
 
         (cache / digest).write_bytes(b"corrupt")

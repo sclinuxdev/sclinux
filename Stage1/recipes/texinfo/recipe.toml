@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "texinfo"
 version = "7.3"
-release = "1"
+release = "2"
 description = "Documentation system for producing online and printed manuals"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -27,7 +27,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr",
+    "PERL=/usr/bin/perl ./configure --prefix=/usr",
     "make -j$(nproc)",
 ]
 
