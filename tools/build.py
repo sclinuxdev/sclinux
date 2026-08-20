@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -24,6 +25,7 @@ DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 SNAPSHOT = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
 PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
 ARCH_TOKEN = re.compile(r"@SC_[A-Z0-9_]+@")
+RAW_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 ARCH_FIELDS = (
     "gnu_triplet",
     "kernel_arch",
@@ -321,6 +323,110 @@ def render_stage1_recipes(
     ]
 
 
+def collect_stage1_sources(manifest: Path = DEFAULT_MANIFEST) -> list[dict]:
+    by_url: dict[str, dict] = {}
+    for name in load_stage1_manifest(manifest):
+        path = DEFAULT_RECIPES / name / "recipe.toml"
+        try:
+            source = tomllib.loads(path.read_text()).get("source")
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
+        if source is None:
+            continue
+        if not isinstance(source, dict):
+            raise ConfigError(f"Stage1 recipe source must be a table: {name}")
+        url = source.get("url")
+        digest = source.get("sha256")
+        if not isinstance(url, str) or not url:
+            raise ConfigError(f"Stage1 recipe source URL is invalid: {name}")
+        if not isinstance(digest, str) or not RAW_SHA256.fullmatch(digest):
+            raise ConfigError(f"Stage1 recipe source SHA-256 is invalid: {name}")
+        existing = by_url.get(url)
+        if existing is not None:
+            if existing["sha256"] != digest:
+                raise ConfigError(f"Stage1 source URL has conflicting checksums: {url}")
+            existing["packages"].append(name)
+        else:
+            by_url[url] = {"url": url, "sha256": digest, "packages": [name]}
+    return [by_url[url] for url in sorted(by_url)]
+
+
+def parse_url_rewrites(values: list[str]) -> list[tuple[str, str]]:
+    rewrites = []
+    for value in values:
+        old, separator, new = value.partition("=")
+        if not separator or not old or not new or "://" not in old or "://" not in new:
+            raise ConfigError(f"invalid URL rewrite {value!r}; expected OLD_URL_PREFIX=NEW_URL_PREFIX")
+        rewrites.append((old, new))
+    return rewrites
+
+
+def rewrite_url(url: str, rewrites: list[tuple[str, str]]) -> str:
+    for old, new in rewrites:
+        if url.startswith(old):
+            return new + url[len(old):]
+    return url
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def fetch_stage1_sources(
+    sources: list[dict],
+    output: Path,
+    rewrites: list[tuple[str, str]],
+    offline: bool = False,
+) -> list[dict]:
+    output.mkdir(parents=True, exist_ok=True)
+    locked = []
+    for source in sources:
+        destination = output / source["sha256"]
+        if not destination.is_file() or sha256_file(destination) != source["sha256"]:
+            if offline:
+                raise ConfigError(f"source is absent or corrupt in offline mode: {source['url']}")
+            temporary = output / f".{source['sha256']}.part"
+            url = rewrite_url(source["url"], rewrites)
+            try:
+                subprocess.run(
+                    [
+                        "curl",
+                        "--fail",
+                        "--location",
+                        "--retry",
+                        "4",
+                        "--retry-all-errors",
+                        "--connect-timeout",
+                        "15",
+                        "--output",
+                        str(temporary),
+                        url,
+                    ],
+                    check=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ConfigError(f"failed to fetch Stage1 source: {source['url']}: {exc}") from exc
+            actual = sha256_file(temporary)
+            if actual != source["sha256"]:
+                raise ConfigError(
+                    f"Stage1 source checksum mismatch for {source['url']}: "
+                    f"expected {source['sha256']}, got {actual}"
+                )
+            temporary.replace(destination)
+        locked.append({**source, "cache": destination.name})
+    return locked
+
+
+def write_sources_lock(sources: list[dict], path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema_version": 1, "sources": sources}, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str) -> list[str]:
     try:
         manifest_digest = seed["manifests"][name]
@@ -427,6 +533,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     recipes.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     recipes.add_argument("--output-dir", type=Path, help="override the rendered recipe directory")
+    fetch = commands.add_parser("fetch", help="download and verify every locked Stage1 source")
+    fetch.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    fetch.add_argument("--output-dir", type=Path, help="override the content-addressed cache")
+    fetch.add_argument(
+        "--rewrite",
+        action="append",
+        default=[],
+        metavar="OLD=NEW",
+        help="rewrite a URL prefix for transport; may be repeated",
+    )
+    fetch.add_argument("--offline", action="store_true", help="verify cache without downloading")
     return parser.parse_args(argv)
 
 
@@ -482,6 +599,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"wrote {len(rendered)} Stage1 recipes under {output}")
+    elif args.command == "fetch":
+        output = args.output_dir or REPO / "out" / args.arch / "sources"
+        try:
+            sources = collect_stage1_sources(args.manifest)
+            rewrites = parse_url_rewrites(args.rewrite)
+            locked = fetch_stage1_sources(sources, output, rewrites, args.offline)
+            lock = write_sources_lock(locked, output.parent / "sources.lock")
+        except (ConfigError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"verified {len(locked)} Stage1 sources; wrote {lock}")
     return 0
 
 

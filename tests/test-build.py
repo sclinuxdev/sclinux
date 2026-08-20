@@ -150,6 +150,25 @@ def main() -> int:
         stage1_packages[-1],
         "base",
     )
+    stage1_sources = build.collect_stage1_sources()
+    failed += not check(
+        "Stage1 source lock deduplicates canonical URLs",
+        len(stage1_sources),
+        90,
+    )
+    failed += not check(
+        "Stage1 source lock retains every package reference",
+        sum(len(source["packages"]) for source in stage1_sources),
+        103,
+    )
+    rewrites = build.parse_url_rewrites(
+        ["https://github.com/=https://mirror.invalid/https://github.com/"]
+    )
+    failed += not check(
+        "Stage1 fetch rewrites transport URLs without changing the lock",
+        build.rewrite_url("https://github.com/org/repo/archive/v1.tar.gz", rewrites),
+        "https://mirror.invalid/https://github.com/org/repo/archive/v1.tar.gz",
+    )
 
     with tempfile.TemporaryDirectory() as directory:
         output = Path(directory) / "sage" / "recipe.toml"
@@ -192,6 +211,41 @@ def main() -> int:
                 for path in all_rendered
             },
             {"aarch64"},
+        )
+
+        cache = Path(directory) / "sources"
+        payload = b"locked source fixture\n"
+        digest = build.hashlib.sha256(payload).hexdigest()
+        cache.mkdir()
+        (cache / digest).write_bytes(payload)
+        fixture_source = {
+            "url": "https://example.invalid/source.tar",
+            "sha256": digest,
+            "packages": ["fixture"],
+        }
+        locked = build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
+        failed += not check(
+            "Stage1 offline fetch accepts a verified content-addressed source",
+            locked[0]["cache"],
+            digest,
+        )
+        lock_path = build.write_sources_lock(locked, Path(directory) / "sources.lock")
+        failed += not check(
+            "Stage1 source lock records the verified cache identity",
+            json.loads(lock_path.read_text())["sources"][0]["sha256"],
+            digest,
+        )
+        (cache / digest).write_bytes(b"corrupt")
+        try:
+            build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
+        except build.ConfigError as exc:
+            offline_error = str(exc)
+        else:
+            offline_error = "no error"
+        failed += not check(
+            "Stage1 offline fetch rejects a corrupt cache entry",
+            "absent or corrupt" in offline_error,
+            True,
         )
 
         linux_output = Path(directory) / "linux-zen" / "recipe.toml"
@@ -267,7 +321,7 @@ def main() -> int:
         [],
     )
 
-    total = 34
+    total = 40
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
