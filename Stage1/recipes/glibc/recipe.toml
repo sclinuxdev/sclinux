@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "glibc"
 version = "2.44"
-release = "2"
+release = "3"
 description = "The GNU C Library"
 license = "LGPL-2.1-or-later"
 channel = "system"
@@ -33,12 +33,12 @@ prepare = [
 ]
 
 build = [
-    "cd build && ../configure --prefix=/usr --disable-profile --enable-kernel=4.19 --enable-stack-protector=strong --disable-nscd libc_cv_slibdir=/usr/lib",
-    "cd build && make -j$(nproc)",
+    'cd build && env -u CPATH -u LIBRARY_PATH CPPFLAGS= LDFLAGS= ../configure --prefix=/usr --with-headers="$SC_BUILD_SYSROOT/usr/include" --disable-profile --enable-kernel=4.19 --enable-stack-protector=strong --disable-nscd libc_cv_slibdir=/usr/lib',
+    "cd build && env -u CPATH -u LIBRARY_PATH make -j$(nproc)",
 ]
 
 install = [
-    "cd build && make install DESTDIR=$DESTDIR",
+    "cd build && env -u CPATH -u LIBRARY_PATH make install DESTDIR=$DESTDIR",
     "mkdir -p $DESTDIR/usr/lib/locale",
     "sed '/RTLDLIST/s@/usr@@g' -i $DESTDIR/usr/bin/ldd 2>/dev/null || true",
 ]
