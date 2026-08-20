@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://downloads.sourceforge.net/project/procps-ng/Production/procps-ng-4.0.7.tar.xz"
-sha256 = ""
+sha256 = "9d2021f47a4501c667862c9942a92d1953694b21d11bcd1702e83eb594e3d67d"
 
 dependencies = [
     "ncurses-libs >= 6.4",

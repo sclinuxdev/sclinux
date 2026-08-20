@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/libarchive/libarchive/releases/download/v3.8.0/libarchive-3.8.0.tar.gz"
-sha256 = ""
+sha256 = "191b5b24811499d5c2e5efa3248975fa6daa5e6a227700cc7b8e54d6d7c06eef"
 
 dependencies = [
     "glibc >= 2.44",

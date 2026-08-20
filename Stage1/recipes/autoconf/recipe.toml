@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://mirrors.kernel.org/gnu/autoconf/autoconf-2.73.tar.xz"
-sha256 = ""
+sha256 = "9fd672b1c8425fac2fa67fa0477b990987268b90ff36d5f016dae57be0d6b52e"
 
 dependencies = [
 ]

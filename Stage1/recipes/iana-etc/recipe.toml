@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/Mic92/iana-etc/releases/download/20260811/iana-etc-20260811.tar.gz"
-sha256 = ""
+sha256 = "c2aef2efc628eb281eb070fef7119a5cef40a5682e33802b0c0230909ad4595c"
 
 dependencies = [
 ]

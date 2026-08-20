@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://www.openssl.org/source/openssl-4.0.1.tar.gz"
-sha256 = ""
+sha256 = "2db3f3a0d6ea4b59e1f094ace2c8cd536dffb87cdc39084c5afa1e6f7f37dd09"
 
 dependencies = [
     "zlib >= 1.3.0",

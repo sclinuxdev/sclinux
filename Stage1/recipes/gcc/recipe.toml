@@ -10,7 +10,7 @@ channel = "toolchain/gcc:15"
 
 [source]
 url = "https://mirrors.kernel.org/gnu/gcc/gcc-15.3.0/gcc-15.3.0.tar.xz"
-sha256 = ""
+sha256 = "fa59c1beef8995f27c4d71c1df227587189315d3e6faff1bb4306e61b0c530eb"
 
 dependencies = [
     "binutils >= 2.43.0",

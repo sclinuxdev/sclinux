@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6.tar.gz"
-sha256 = ""
+sha256 = "653427f0f5014750aafff22727fb2aa60c6c732ca91808cfb78ce22ddd9e55f0"
 
 dependencies = [
     "glibc >= 2.44",
