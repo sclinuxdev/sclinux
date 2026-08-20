@@ -309,6 +309,14 @@ def main() -> int:
             and "mmroff" in groff["source"]["install"][1],
             True,
         )
+        setuptools_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "setuptools" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 setuptools retains its generated pyproject validators",
+            "fastjsonschema_*.py" in setuptools_recipe["source"]["install"][2],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -665,7 +673,7 @@ def main() -> int:
         [],
     )
 
-    total = 63
+    total = 64
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
