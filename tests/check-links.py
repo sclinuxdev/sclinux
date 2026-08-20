@@ -17,9 +17,42 @@ SKIP_DIRS = {".git", ".github", "node_modules"}
 
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*$", re.MULTILINE)
-# Both fence styles, and the closing fence must match the opening one so a
-# ``` inside a ~~~ block does not terminate it early.
-FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
+FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+def without_fenced_code(text: str) -> str:
+    """Remove CommonMark backtick and tilde fenced code blocks.
+
+    A closing marker must use the same character, be at least as long as the
+    opener, and contain no trailing text. An unclosed block extends to EOF.
+    """
+    visible: list[str] = []
+    fence_char = ""
+    fence_length = 0
+
+    for line in text.splitlines(keepends=True):
+        content = line.rstrip("\r\n")
+
+        if fence_char:
+            closing = rf"^ {{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$"
+            if re.fullmatch(closing, content):
+                fence_char = ""
+                fence_length = 0
+            continue
+
+        match = FENCE_OPEN.match(content)
+        if match:
+            marker, info = match.groups()
+            if marker[0] == "`" and "`" in info:
+                visible.append(line)
+                continue
+            fence_char = marker[0]
+            fence_length = len(marker)
+            continue
+
+        visible.append(line)
+
+    return "".join(visible)
 
 
 def slug(heading: str) -> str:
@@ -37,7 +70,7 @@ def slug(heading: str) -> str:
 def anchors_of(text: str) -> set[str]:
     # Headings inside fenced code blocks are not headings.
     anchors: set[str] = set()
-    for heading in HEADING.findall(FENCE.sub("", text)):
+    for heading in HEADING.findall(without_fenced_code(text)):
         base = slug(heading)
         anchor = base
         suffix = 0
@@ -50,7 +83,7 @@ def anchors_of(text: str) -> set[str]:
 
 def links_of(text: str) -> list[str]:
     # Markdown-looking examples inside fenced code blocks are not links.
-    return LINK.findall(FENCE.sub("", text))
+    return LINK.findall(without_fenced_code(text))
 
 
 def main() -> int:

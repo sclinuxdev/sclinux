@@ -49,6 +49,49 @@ def main() -> int:
             checker.anchors_of("~~~\n# Fake\n~~~\n# Real\n"),
             {"real"},
         ),
+        (
+            "a shorter marker does not close a longer tilde fence",
+            checker.links_of(
+                "~~~~\n~~~\n[example](missing.md)\n~~~\n~~~~\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "headings stay hidden until the full-length fence closes",
+            checker.anchors_of("~~~~\n~~~\n# Fake\n~~~\n~~~~\n# Real\n"),
+            {"real"},
+        ),
+        (
+            "trailing text prevents a line from closing the fence",
+            checker.links_of(
+                "```\n[first](one.md)\n```python\n[second](two.md)\n```\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "fences may be indented by up to three spaces",
+            checker.links_of(
+                "  ```\n[example](missing.md)\n   ```\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "an unclosed fence continues to end of file",
+            checker.links_of("```\n[example](missing.md)\n"),
+            [],
+        ),
+        (
+            "a longer closing marker is accepted",
+            checker.links_of(
+                "```\n[example](missing.md)\n````\n[real](README.md)\n"
+            ),
+            ["README.md"],
+        ),
+        (
+            "a backtick in the info string prevents a backtick fence opener",
+            checker.links_of("```bad`info\n[real](README.md)\n"),
+            ["README.md"],
+        ),
     ]
 
     failed = 0

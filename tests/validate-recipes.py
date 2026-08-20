@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every packages/*/recipe.toml against what sage actually parses.
+"""Validate every repository recipe.toml against what sage actually parses.
 
 Mirrors sage::package::Recipe::parse_toml upstream. The important subtlety is
 scope: sage reads the dependency and build-phase arrays from THREE places and
@@ -42,7 +42,7 @@ DEBT_HEADER = """\
 # Adding a line here is not routine: it means shipping a source that sage will
 # download and build without verifying. Fix the checksum instead.
 #
-# Regenerate after resolving one:  python3 tests/validate-recipes.py --update-debt
+# Remove resolved entries:  python3 tests/validate-recipes.py --update-debt
 """
 
 
@@ -152,7 +152,8 @@ def validate(path: Path) -> list[str]:
             errors.append("[source] present but url is empty")
         # Policy: docs/DISTRO_POLICY.md §5.1 -- sage skips verification entirely
         # when sha256 is absent, which makes the download unverified.
-        if not src.get("sha256"):
+        checksum = src.get("sha256")
+        if not isinstance(checksum, str) or not checksum:
             errors.append(MISSING_CHECKSUM)
 
     # Emptiness is judged against the merged view, exactly as sage builds it.
@@ -205,10 +206,13 @@ def is_build_artifact(path: Path) -> bool:
     directory only counts as an artifact when it sits beside a recipe.toml --
     that is, inside an actual recipe directory.
     """
-    return any(
-        ancestor.name in BUILD_ARTIFACT_DIRS and (ancestor.parent / "recipe.toml").is_file()
-        for ancestor in path.parents
-    )
+    for ancestor in path.parents:
+        if ancestor == REPO:
+            break
+        if (ancestor.name in BUILD_ARTIFACT_DIRS
+                and (ancestor.parent / "recipe.toml").is_file()):
+            return True
+    return False
 
 
 def discover_recipes() -> list[Path]:
@@ -218,18 +222,27 @@ def discover_recipes() -> list[Path]:
     validator entirely while CI stayed green, so discovery is recursive: a
     recipe tree added later cannot go unchecked by default.
     """
-    return sorted(
-        path
-        for path in REPO.rglob("recipe.toml")
-        if not any(part.startswith(".") for part in path.relative_to(REPO).parts)
-        and not is_build_artifact(path)
-    )
+    found = []
+    for path in REPO.rglob("recipe.toml"):
+        rel = path.relative_to(REPO)
+        if rel.parts[0] == ".git" or is_build_artifact(path):
+            continue
+        found.append(path)
+    return sorted(found)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
+    unknown = sorted(set(args) - {"--strict", "--update-debt"})
+    if unknown:
+        print(f"unknown argument(s): {' '.join(unknown)}", file=sys.stderr)
+        return 2
+
     strict = "--strict" in args
     update = "--update-debt" in args
+    if strict and update:
+        print("--strict and --update-debt are mutually exclusive", file=sys.stderr)
+        return 2
 
     recipes = discover_recipes()
     if not recipes:
@@ -237,52 +250,58 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     grandfathered = load_debt()
-    failed = 0
+    invalid: set[str] = set()
     still_owed: set[str] = set()
 
     for path in recipes:
         rel = path.relative_to(REPO).as_posix()
         errors = validate(path)
 
-        if errors == [MISSING_CHECKSUM] and not strict:
+        if MISSING_CHECKSUM in errors:
             still_owed.add(rel)
-            continue
+            if not strict:
+                errors = [error for error in errors if error != MISSING_CHECKSUM]
 
         if errors:
-            failed += 1
+            invalid.add(rel)
             print(f"FAIL  {rel}")
             for err in errors:
                 print(f"        {err}")
 
     violations, resolved = classify_debt(grandfathered, still_owed)
 
-    if update:
-        write_debt(still_owed)
-        print(f"wrote {CHECKSUM_DEBT_FILE.relative_to(REPO)}: "
-              f"{len(still_owed)} recipe(s) awaiting a checksum")
-        return 1 if failed else 0
-
     if violations:
-        failed += len(violations)
         print(f"FAIL  {len(violations)} recipe(s) ship a source with no checksum and are not grandfathered:")
         for rel in sorted(violations):
             print(f"        {rel}")
         print("      a newly added source must ship a checksum -- do not add it to "
               f"{CHECKSUM_DEBT_FILE.name}")
 
-    clean = len(recipes) - failed - len(still_owed)
-    print(f"\n{clean} passed, {failed} failed, {len(still_owed)} awaiting a checksum  "
+    failed_paths = invalid | violations
+
+    if update:
+        if failed_paths:
+            print("FAIL  refusing to update checksum debt while recipe errors or new debt exist")
+            return 1
+        updated = grandfathered & still_owed
+        write_debt(updated)
+        print(f"wrote {CHECKSUM_DEBT_FILE.relative_to(REPO)}: "
+              f"{len(updated)} recipe(s) awaiting a checksum")
+        return 0
+
+    waiting = (still_owed & grandfathered) - invalid
+    clean = len(recipes) - len(failed_paths) - len(waiting)
+    print(f"\n{clean} passed, {len(failed_paths)} failed, {len(waiting)} awaiting a checksum  "
           f"({len(recipes)} recipes)")
 
     if resolved:
-        failed += 1
         print(f"\nFAIL  {len(resolved)} entry(ies) in {CHECKSUM_DEBT_FILE.name} no longer owe a checksum:")
         for rel in sorted(resolved):
             print(f"        {rel}")
         print("      remove them, so the debt cannot grow back into the freed slots:")
         print("        python3 tests/validate-recipes.py --update-debt")
 
-    return 1 if failed else 0
+    return 1 if failed_paths or resolved else 0
 
 
 if __name__ == "__main__":

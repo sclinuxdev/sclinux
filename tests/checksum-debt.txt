@@ -3,7 +3,7 @@
 # Adding a line here is not routine: it means shipping a source that sage will
 # download and build without verifying. Fix the checksum instead.
 #
-# Regenerate after resolving one:  python3 tests/validate-recipes.py --update-debt
+# Remove resolved entries:  python3 tests/validate-recipes.py --update-debt
 Stage1/recipes/acl/recipe.toml
 Stage1/recipes/attr/recipe.toml
 Stage1/recipes/autoconf/recipe.toml
