@@ -19,7 +19,7 @@
 [![Btrfs Status](https://img.shields.io/badge/Btrfs-0%25_FORBIDDEN-red.svg?style=flat-square)](#)
 [![Package Manager](https://img.shields.io/badge/Pkg_Manager-shc(Sage)-cyan.svg?style=flat-square)](https://github.com/antinomie1/sage)
 [![Sage Upstream](https://img.shields.io/badge/Sage_Upstream-antinomie1%2Fsage-181717.svg?style=flat-square&logo=github)](https://github.com/antinomie1/sage)
-[![Core Architecture](https://img.shields.io/badge/Core-Modern_C%2B%2B20_Modules-purple.svg?style=flat-square)](#)
+[![Core Architecture](https://img.shields.io/badge/Core-Modern_C%2B%2B23_Modules-purple.svg?style=flat-square)](#)
 [![Rating](https://img.shields.io/badge/maimai_DX-Rating_16000+-brightgreen.svg?style=flat-square)](#)
 
 <p align="center">
@@ -77,7 +77,7 @@
 - 🧱 **XFS 联盟正统血脉 (Pure XFS Root)**
   - 默认全盘格式化为高性能 XFS 文件系统，彻底杜绝 CoW 带来的虚拟机磁盘碎片化与 I/O 暴跌地狱，筑牢物理信号锚点。
 - 🌿 **`shc(Sage)` 信号主权包管理系统**
-  - 基于 Modern C++20 模块（C++20 Modules）纯自研架构，搭载 LMDB 零拷贝内存映射 B+ 树与 PubGrub SAT 求解器，提供纳秒级查询、多层 Channel 隔离与一键声明式重构。
+  - 基于 Modern C++23 模块（C++23 Modules）纯自研架构，搭载 LMDB 零拷贝内存映射 B+ 树与 PubGrub SAT 求解器，提供纳秒级查询、多层 Channel 隔离与一键声明式重构。
 - 🎮 **`wmdx` 次世代图形渲染栈**
   - 跨越方式土地（Wayland），原生集成 Vulkan 硬件级加速着色器，支持 0 延迟动态模糊、多 DPI 无损缩放与音游级锁帧。
 - 🛡️ **坚决维护 systemd 伟大使命**
@@ -98,7 +98,7 @@ shc in hyprland neofetch-mew
 # 2. 开辟多重时空：安装软件包至指定隔离工具链通道（Toolchain Channel）
 shc in --channel rust-nightly rust
 
-# 3. 终焉对齐协议：读取 /etc/distro/system.toml 一键声明式重铸全系统节点
+# 3. 终焉对齐协议：读取 /etc/sage/system.toml 一键声明式重铸全系统节点
 shc rebuild
 
 # 4. 纳秒级洞察万物真名与所有权归属
@@ -111,13 +111,13 @@ shc status --full
 > [!TIP]
 > 💡 **命令机制与软链接提示 (Symlink & Invocation Guide)**：
 > - **极客盲打首选**：神宸 Linux 系统默认在 `/usr/bin/shc` 预置了指向核心包管理二进制 `/usr/bin/sage` 的符号软链接（`shc -> /usr/bin/sage`），只需敲击 3 个字符 `shc` 即可完成全套盲打操作（如 `shc in`、`shc rb`、`shc q`）。
-> - **无缝完全等价**：`shc` 与 `sage` 在执行层面 100% 行为一致，共享完全相同的参数体系、LMDB 状态库（`/var/lib/distro/data.mdb`）与 PubGrub 依赖求解引擎。无论你在终端输入 `shc` 还是 `sage`，均能直接调动系统最底层的包管理神力。
+> - **无缝完全等价**：`shc` 与 `sage` 在执行层面 100% 行为一致，共享完全相同的参数体系、LMDB 状态库（`/var/lib/sage/data.mdb`）与 PubGrub 依赖求解引擎。无论你在终端输入 `shc` 还是 `sage`，均能直接调动系统最底层的包管理神力。
 
 ```text
 [OK] Kernel: 6.x.x-shenchen-divine
 [OK] Signal Field: Synchronized (Wolf King Core Active)
 [OK] RootFS: XFS (Status: Healthy / Btrfs Defeated)
-[OK] Package Engine: Sage 2.0 (via shc symlink / LMDB Zero-Copy Active)
+[OK] Package Engine: Sage 0.1.0 (via shc symlink / LMDB Zero-Copy Active)
 [OK] Compositor: wmdx (Vulkan 1.3 Active)
 [OK] Mood: Satisfied with Roasted Fish 🐟
 ```
@@ -139,12 +139,12 @@ shc status --full
 * ⚡ **信号碎片极速具象化 (`*.pkg.tar.zst` 流式归档与真名解析)**  
   彻底摒弃臃肿的旧式归档库，采用 64KB 环形缓冲与 `libzstd` 原生流式吞吐，并在落盘瞬间通过自动化 ELF 扫描器洞悉动态链接库（`DT_NEEDED` 与 `DT_SONAME`）的宿命羁绊。
 * 🔄 **终焉对齐协议 (`shc rebuild` 声明式重构)**  
-  当外界噪声侵蚀或系统需更替核心底座时，读取 `/etc/distro/system.toml`，一秒完成七大节点的原子置换与全系统重铸，永葆神明系统的纯净状态。
+  当外界噪声侵蚀或系统需更替核心底座时，读取 `/etc/sage/system.toml`，一秒完成七大节点的原子置换与全系统重铸，永葆神明系统的纯净状态。
 
 > [!IMPORTANT]
 > ### 📖 剥离世界观：查阅纯技术白皮书
 > 以上为**浩宸宇宙 · 信号场**视角的具象化映射与叙事。  
-> 若你希望**剥离一切狼王神力、苏浩宸、红眼观察者与二创设定**，直接研读 100% 严肃、面向底层系统架构师与开发者的工业级 Modern C++20 模块化软件管理技术规范（包含 LMDB 表物理设计、Tar+Zstd 环形缓冲区内存模型、PubGrub SAT 算法实现、多 Init 编译转换表与 100% C++20 模块 DAG），请移步专用设计白皮书与开源仓库：
+> 若你希望**剥离一切狼王神力、苏浩宸、红眼观察者与二创设定**，直接研读 100% 严肃、面向底层系统架构师与开发者的工业级 Modern C++23 模块化软件管理技术规范（包含 LMDB 表物理设计、Tar+Zstd 环形缓冲区内存模型、PubGrub SAT 算法实现、多 Init 编译转换表与 100% C++23 模块 DAG），请移步专用设计白皮书与开源仓库：
 > 
 > 👉 **[🌿 Sage Package Manager Technical Specification & Architecture Reference (`docs/SAGE_DESIGN.md`)](docs/SAGE_DESIGN.md)**  
 > 👉 **[🌿 GitHub 上游开源仓库: antinomie1/sage](https://github.com/antinomie1/sage)**
@@ -154,9 +154,9 @@ shc status --full
 ## 📚 延伸文档 (Documentation)
 
 - 🌿 [**Sage 官方上游开源仓库 (GitHub: antinomie1/sage)**](https://github.com/antinomie1/sage)  
-  *官方代码仓库*。Sage 软件包管理器的独立开源实现与最新 C++20 代码。
+  *官方代码仓库*。Sage 软件包管理器的独立开源实现与最新 C++23 代码（上游以 BSD 2-Clause 协议单独发布）。
 - 🌿 [**shc(Sage) 软件管理系统技术规范文档 (`docs/SAGE_DESIGN.md`)**](docs/SAGE_DESIGN.md)  
-  *纯技术文档（无狼王设定）*。包含完整 5 层架构、LMDB 存储表 Schema、`*.pkg.tar.zst` 流式解包、Multi-Init 映射、PubGrub SAT 算法、CLI 完整规范、C++20 模块 DAG 与 5 大工程铁律。
+  *纯技术文档（无狼王设定）*。包含完整 5 层架构、LMDB 存储表 Schema、`*.pkg.tar.zst` 流式解包、Multi-Init 映射、PubGrub SAT 算法、CLI 完整规范、C++23 模块 DAG 与 5 大工程铁律。
 - 🐾 [**浩宸宇宙：狼王与信号场设定集 (`docs/浩宸宇宙_狼王与信号场设定集.md`)**](docs/浩宸宇宙_狼王与信号场设定集.md)  
   *世界观设定集*。包含苏浩宸、奶龙火种、月狼血脉、七节点试炼、边界守卫、红眼观察者与终焉狼庭的完整宇宙观设定。
 

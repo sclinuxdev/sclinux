@@ -1,11 +1,13 @@
 # 🌿 Sage Package Manager Technical Specification & Architecture Reference
 
-**Version:** 2.0  
+**Spec Version:** 2.0 (本规范文档版本)  
+**Sage Release:** 0.1.0 (上游实现版本，见 `xmake.lua` 的 `set_version`)  
 **Status:** Approved  
-**Language Standards:** Modern C++20 (100% C++20 Modules `.cppm`)  
+**Language Standards:** Modern C++23 (100% C++23 Modules `.cppm`)  
 **Build System:** xmake  
 **Target Platform:** Linux (FHS Compliant / POSIX Native)  
-**Upstream Repository:** [https://github.com/antinomie1/sage](https://github.com/antinomie1/sage)
+**Upstream Repository:** [https://github.com/antinomie1/sage](https://github.com/antinomie1/sage)  
+**License:** Sage 上游以 **BSD 2-Clause** 单独发布；本仓库 ShenChen Linux 采用 **BSD 3-Clause**，两者互不影响。
 
 ---
 
@@ -20,7 +22,7 @@
 7. [声明式系统重构与通用服务规范](#7-声明式系统重构与通用服务规范)
 8. [PubGrub / CDCL SAT 依赖求解引擎](#8-pubgrub--cdcl-sat-依赖求解引擎)
 9. [CLI 命令行接口完整规范](#9-cli-命令行接口完整规范)
-10. [C++20 模块拓扑与架构依赖 DAG](#10-c20-模块拓扑与架构依赖-dag)
+10. [C++23 模块拓扑与架构依赖 DAG](#10-c23-模块拓扑与架构依赖-dag)
 11. [第三方 Vendor RAII 桥接模块设计](#11-第三方-vendor-raii-桥接模块设计)
 12. [五大工程铁律与代码质量控制](#12-五大工程铁律与代码质量控制)
 13. [构建、测试与开发工作流 (xmake)](#13-构建测试与开发工作流-xmake)
@@ -29,16 +31,16 @@
 
 ## 1. 项目愿景与核心架构哲学
 
-**Sage** 是一个采用现代 C++20 从零编写的高性能、模块化、多层通用 Linux 软件管理系统。
+**Sage** 是一个采用现代 C++23 从零编写的高性能、模块化、多层通用 Linux 软件管理系统。
 
 ### 核心架构支柱：
 * **⚡ 极致性能与零拷贝 (Zero-Copy)**：依托 **LMDB** 内存映射 B+ 树实现纳秒级包元数据查询与写入时的 Copy-on-Write ACID 事务安全。
 * **🌐 通用多层 Channel 体系**：无缝管理系统根层 (`/`)、共享运行时 (`/usr/lib/runtimes`)、隔离工具链 (`/opt/channels`) 以及用户级应用 (`~/.local`)，并通过 Profile 聚合严格遵循 FHS 标准。
 * **🎛️ 绝对系统主权与极简虚拟接口**：将虚拟提供者收敛于互斥大件（`virtual/init`, `virtual/udev`, `virtual/libc`），内核、Shell、Awk、Coreutils 等作为天然共存组件管理，消除冗余抽象。
-* **🔄 声明式系统重构 (`sage rebuild`)**：自动对比 `/etc/distro/system.toml` 与 LMDB 活动状态，执行底层组件的原子置换并重新生成全系统服务脚本。
+* **🔄 声明式系统重构 (`sage rebuild`)**：自动对比 `/etc/sage/system.toml` 与 LMDB 活动状态，执行底层组件的原子置换并重新生成全系统服务脚本。
 * **🔌 通用服务规范 (`service.toml`)**：采用与 Init 解耦的声明格式，一键自动编译生成 OpenRC、Runit、Systemd、Dinit、s6 原生服务脚本。
 * **🧩 原生 PubGrub / CDCL SAT 求解器**：无任何外部 SAT 求解库依赖，数学完备求解版本区间与 SONAME 依赖，提供因果树冲突诊断。
-* **🛡️ 100% C++20 Modules 与 RAII 内存安全**：业务代码零传统头文件污染，系统动态链接于 `liblmdb`、`libzstd`、`libtomlplusplus` 与 `libcurl`。
+* **🛡️ 100% C++23 Modules 与 RAII 内存安全**：业务代码零传统头文件污染，系统动态链接于 `liblmdb`、`libzstd`、`libtomlplusplus` 与 `libcurl`。
 
 ---
 
@@ -47,7 +49,7 @@
 ```mermaid
 graph TB
     subgraph StorageLayer["1. 存储与状态层 (Storage Layer)"]
-        LMDB["<b>LMDB 零拷贝数据库 (Zero-Copy DB)</b><br/>/var/lib/distro/data.mdb<br/>(Packages, Files, Provides, Channels, System)"]
+        LMDB["<b>LMDB 零拷贝数据库 (Zero-Copy DB)</b><br/>/var/lib/sage/data.mdb<br/>(Packages, Files, Provides, Channels, System)"]
     end
 
     subgraph ChannelLayer["2. Channel 运行时层 (Channel Runtime Layer)"]
@@ -55,7 +57,7 @@ graph TB
         RuntimeChannel["<b>Runtime Channel (`/usr/lib/runtimes/`)</b><br/>共享 SDK、LLVM、CUDA 运行时"]
         ToolchainChannel["<b>Toolchain Channel (`/opt/channels/`)</b><br/>多版本隔离工具链与语言环境"]
         UserChannel["<b>User Channel (`~/.local/`)</b><br/>非 Root 用户独立应用包"]
-        ProfileEngine["<b>Profile Engine 聚合引擎</b><br/>符号链接映射与 /etc/profile.d/distro-channels.sh"]
+        ProfileEngine["<b>Profile Engine 聚合引擎</b><br/>符号链接映射与 /etc/profile.d/sage-channels.sh"]
     end
 
     subgraph ServiceLayer["3. 通用服务转换层 (Universal Service Layer)"]
@@ -64,7 +66,7 @@ graph TB
     end
 
     subgraph SolverLayer["4. 依赖求解与重构层 (Solver & Reconcile Layer)"]
-        PubGrub["<b>自研 C++20 PubGrub / CDCL SAT 求解器</b><br/>(版本区间、虚拟提供者、SONAME 动态解析)"]
+        PubGrub["<b>自研 C++23 PubGrub / CDCL SAT 求解器</b><br/>(版本区间、虚拟提供者、SONAME 动态解析)"]
         RebuildEngine["<b>声明式重构引擎 (Reconcile Engine)</b><br/>(Diff system.toml vs LMDB -> 原子置换)"]
     end
 
@@ -85,7 +87,7 @@ graph TB
 
 ## 3. LMDB 零拷贝状态存储引擎与 Schema
 
-状态数据库存储于 `/var/lib/distro/data.mdb`，利用专用命名数据库（DBI Table）管理状态：
+状态数据库存储于 `/var/lib/sage/data.mdb`，利用专用命名数据库（DBI Table）管理状态：
 
 | 表名 (DBI) | 键 (Key) | 值 (Value) | 职责与作用 |
 | :--- | :--- | :--- | :--- |
@@ -127,7 +129,7 @@ Sage 引入多层 Channel 运行时模型，打破传统发行版“单一 RootF
 2. **Runtime Channel (`/usr/lib/runtimes/`)**：存放多个共存的 SDK、运行时环境（如 `cuda-12.2`、`llvm-18`）。
 3. **Toolchain Channel (`/opt/channels/`)**：完全隔离的语言工具链（如 `rust-nightly`、`python312`）。
 4. **User Channel (`~/.local/`)**：非特权用户安装的 CLI 工具与桌面程序。
-5. **Profile 聚合引擎**：根据通道优先级自动管理符号链接，并生成 `/etc/profile.d/distro-channels.sh`，保证与 Linux FHS 完美对齐。
+5. **Profile 聚合引擎**：根据通道优先级自动管理符号链接，并生成 `/etc/profile.d/sage-channels.sh`，保证与 Linux FHS 完美对齐。
 
 ---
 
@@ -147,7 +149,7 @@ Sage 引入多层 Channel 运行时模型，打破传统发行版“单一 RootF
 ## 7. 声明式系统重构与通用服务规范
 
 ### 1. 声明式系统重构 (`sage rebuild`)
-- 配置文件路径：`/etc/distro/system.toml`
+- 配置文件路径：`/etc/sage/system.toml`
 - 配置文件示例：
   ```toml
   [system]
@@ -188,7 +190,7 @@ group = "root"
 
 ## 8. PubGrub / CDCL SAT 依赖求解引擎
 
-内置原生 C++20 实现的 PubGrub 依赖求解算法：
+内置原生 C++23 实现的 PubGrub 依赖求解算法：
 - 支持 SemVer 版本范围比较（如 `>=1.2.0, <2.0.0`）。
 - 支持虚拟提供者与 ELF SONAME 动态符号解析。
 - **因果树冲突诊断 (Cause Tree Diagnostics)**：依赖冲突时输出清晰的人类可读因果关系诊断树，精确定位冲突来源包与版本链条。
@@ -283,9 +285,9 @@ sage service generate sshd
 
 ---
 
-## 10. C++20 模块拓扑与架构依赖 DAG
+## 10. C++23 模块拓扑与架构依赖 DAG
 
-系统 100% 采用 C++20 Modules (`.cppm`) 架构，无传统业务头文件，模块间维持严格单向无环依赖：
+系统 100% 采用 C++23 Modules (`.cppm`) 架构，无传统业务头文件，模块间维持严格单向无环依赖：
 
 ```mermaid
 graph TD
@@ -350,7 +352,7 @@ graph TD
 
 ## 11. 第三方 Vendor RAII 桥接模块设计
 
-第三方 C/C++ 库头文件隔离于 `src/vendor/` 内部，通过全局模块片段（Global Module Fragment）封装并导出纯 C++20 接口：
+第三方 C/C++ 库头文件隔离于 `src/vendor/` 内部，通过全局模块片段（Global Module Fragment）封装并导出纯 C++23 接口：
 
 * `sage.vendor.lmdb`：将 `MDB_env*`, `MDB_txn*`, `MDB_dbi`, `MDB_cursor*` 封装为 `Env`, `Txn`, `Dbi`, `Cursor` RAII 类。未提交的事务在析构时自动 abort。
 * `sage.vendor.zstd`：封装 `ZSTD_DCtx*` 与 `ZSTD_CCtx*`，提供零拷贝流式压缩与解压缩器。
@@ -370,7 +372,7 @@ graph TD
    - 全面采用 `std::expected` 单子错误处理与 `std::format` / `std::ranges`。
 3. **零运行时开销的代码复用 (DRY)**：
    - 通用逻辑在 `sage.util` 中实现，通过 `constexpr` 与模板保证零额外运行时开销。
-4. **100% C++20 Module 体系**：
+4. **100% C++23 Module 体系**：
    - 业务逻辑一律使用 `.cppm`，禁止在业务代码中 `#include` 头文件。
 5. **严格正交的单向依赖拓扑**：
    - 严格遵循 `vendor` -> `util` -> `models` -> `storage/archive` -> `solver` -> `rebuild` -> `root` -> `cli`。
