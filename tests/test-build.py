@@ -155,6 +155,17 @@ def main() -> int:
         any(seed["index_digest"] in argument for argument in command),
         True,
     )
+    stage1_environment = build.stage1_build_environment(seed)
+    failed += not check(
+        "Stage1 exports the locked source epoch",
+        stage1_environment["SOURCE_DATE_EPOCH"],
+        str(seed["source_date_epoch"]),
+    )
+    failed += not check(
+        "Stage1 fixes the build timezone",
+        stage1_environment["TZ"],
+        "UTC",
+    )
     sage_source = build.source_for_package("sage")
     failed += not check(
         "Stage0 receives the locked Sage source identity",
@@ -334,6 +345,17 @@ def main() -> int:
             "aarch64",
         )
 
+        fixture_artifact = fixture_recipe.parent / "fixture-1.0-1-aarch64.pkg.tar.zst"
+        fixture_artifact.write_bytes(payload)
+        fixture_entry = build.stage1_package_entry(
+            "fixture", fixture_recipe, build.resolve_architecture("aarch64")
+        )
+        failed += not check(
+            "Stage1 resumes from an existing architecture-matched artifact",
+            fixture_entry["sha256"],
+            digest,
+        )
+
         (cache / digest).write_bytes(b"corrupt")
         try:
             build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
@@ -420,7 +442,7 @@ def main() -> int:
         [],
     )
 
-    total = 50
+    total = 53
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -484,6 +485,46 @@ def select_stage1_packages(
     return packages[start:stop]
 
 
+def stage1_build_environment(seed: dict | None = None) -> dict[str, str]:
+    seed = seed or load_seed_lock()
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "SOURCE_DATE_EPOCH": str(seed["source_date_epoch"]),
+            "TZ": "UTC",
+            "XMAKE_ROOT": "y",
+            "XMAKE_STATS": "false",
+        }
+    )
+    return environment
+
+
+def stage1_package_entry(
+    name: str, recipe_path: Path, architecture: dict[str, str]
+) -> dict | None:
+    data = tomllib.loads(recipe_path.read_text())
+    package = data["package"]
+    if package.get("arch") != architecture["arch"]:
+        raise ConfigError(f"rendered Stage1 recipe has wrong architecture: {name}")
+    artifact = recipe_path.parent / (
+        f"{name}-{package['version']}-{package.get('release', '1')}-"
+        f"{architecture['arch']}.pkg.tar.zst"
+    )
+    if not artifact.is_file():
+        return None
+    return {
+        "name": name,
+        "version": package["version"],
+        "release": package.get("release", "1"),
+        "arch": architecture["arch"],
+        "sha256": sha256_file(artifact),
+        "recipe_sha256": sha256_file(recipe_path),
+        "artifact": artifact.name,
+    }
+
+
 def run_stage1_packages(
     architecture: dict[str, str],
     workspace: Path,
@@ -491,44 +532,40 @@ def run_stage1_packages(
     last: str | None = None,
     sage: str = "sage",
 ) -> list[dict]:
-    packages = select_stage1_packages(load_stage1_manifest(), first, last)
+    manifest = load_stage1_manifest()
+    packages = select_stage1_packages(manifest, first, last)
     recipes = workspace / "recipes"
     sources = workspace / "sources"
-    locked = []
+    locked_by_name = {}
+    for name in manifest:
+        recipe_path = recipes / name / "recipe.toml"
+        if recipe_path.is_file():
+            entry = stage1_package_entry(name, recipe_path, architecture)
+            if entry is not None:
+                locked_by_name[name] = entry
+    built = []
+    environment = stage1_build_environment()
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
             raise ConfigError(f"rendered Stage1 recipe does not exist: {recipe_path}")
-        data = tomllib.loads(recipe_path.read_text())
-        package = data["package"]
-        if package.get("arch") != architecture["arch"]:
-            raise ConfigError(f"rendered Stage1 recipe has wrong architecture: {name}")
         clean_stage1_recipe(recipe_path.parent, name)
         stage_recipe_source(recipe_path, sources)
         try:
-            subprocess.run([sage, "build", str(recipe_path.parent)], check=True)
+            subprocess.run(
+                [sage, "build", str(recipe_path.parent)], check=True, env=environment
+            )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ConfigError(f"Stage1 package build failed: {name}: {exc}") from exc
-        artifact = recipe_path.parent / (
-            f"{name}-{package['version']}-{package.get('release', '1')}-"
-            f"{architecture['arch']}.pkg.tar.zst"
-        )
-        if not artifact.is_file():
-            raise ConfigError(f"Stage1 package artifact is missing: {artifact}")
-        locked.append(
-            {
-                "name": name,
-                "version": package["version"],
-                "release": package.get("release", "1"),
-                "arch": architecture["arch"],
-                "sha256": sha256_file(artifact),
-                "recipe_sha256": sha256_file(recipe_path),
-                "artifact": artifact.name,
-            }
-        )
+        entry = stage1_package_entry(name, recipe_path, architecture)
+        if entry is None:
+            raise ConfigError(f"Stage1 package artifact is missing after build: {name}")
+        built.append(entry)
+        locked_by_name[name] = entry
         clean_stage1_workdirs(recipe_path.parent)
+        locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
-    return locked
+    return built
 
 
 def write_packages_lock(packages: list[dict], path: Path) -> Path:
