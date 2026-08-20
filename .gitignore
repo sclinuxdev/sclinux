@@ -11,6 +11,10 @@
 *.swo
 *~
 
+# ---- Python ----
+__pycache__/
+*.py[cod]
+
 # ---- xmake ----
 .xmake/
 build/

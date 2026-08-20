@@ -25,10 +25,10 @@
 | 项 | 决定 | 改动代价 | 依据 |
 | :--- | :--- | :--- | :--- |
 | 目标架构 | `x86_64` | 高 | 首轮唯一目标；新增架构需重新引导整条工具链 |
-| C 库 | **glibc**（GNU 路线） | **极高** | 换 musl 需重编全部二进制 |
+| C 库 | **glibc**（GNU 路线） | **极高** | 见 §1.1——机制支持切换，但需并存一套 musl 包集 |
 | 基本命令 | **GNU coreutils** | 中 | 与 glibc 同属 GNU 路线 |
-| Init | **systemd** | 高 | 波及所有带服务定义的包 |
-| udev | `systemd-udevd` | 中 | 随 systemd 提供 |
+| Init | **systemd** | **低** | 见 §1.1——`service.toml` 与 Init 解耦，切换无需重编任何包 |
+| udev | `systemd-udevd` | 低 | `virtual/udev` 可切换至 `eudev` |
 | 包管理器 | **sage / shc** | — | 见 [SAGE_DESIGN.md](SAGE_DESIGN.md) |
 | 根文件系统 | **XFS on LVM thin** | 高 | 见 [INSTALLATION.md §2](INSTALLATION.md) |
 | 引导器 | **systemd-boot** | 中 | 见 [INSTALLATION.md §4](INSTALLATION.md) |
@@ -39,6 +39,31 @@
 | 合成器 | `wmdx`（长期目标） | 低 | 首发可先带现成合成器，不阻塞发行版 |
 
 > **「极高」的含义**：该项一旦变更，仓库中已有的全部二进制包作废，必须整体重编。这类决定应当视为不可逆。
+
+### 1.1 可切换底座与其真实成本
+
+Sage 在设计上就把三个互斥大件做成了可切换的虚拟提供者（见 [SAGE_DESIGN.md §6](SAGE_DESIGN.md)）：
+
+```toml
+[providers]
+init = "systemd"        # 可选 openrc / runit / dinit / s6
+udev = "systemd-udevd"  # 可选 eudev
+libc = "glibc"          # 可选 musl
+```
+
+修改 `system.toml` 后执行 `sage rebuild`，引擎会比对声明状态与 LMDB 实际状态，对底座包执行原子置换。**本表中的「改动代价」指的不是这个机制是否可用，而是切换后为使系统重新可用所需的额外工作量。** 三者差别很大：
+
+| 提供者 | 切换后还需要做什么 | 代价 |
+| :--- | :--- | :--- |
+| **`virtual/init`** | **无。** `service.toml` 与 Init 解耦，`sage rebuild` 直接为新 Init 重新生成全部原生服务脚本 | 低 |
+| **`virtual/udev`** | 基本无，规则格式高度兼容 | 低 |
+| **`virtual/libc`** | **重编仓库中每一个二进制包** | 极高 |
+
+`virtual/init` 正是这套设计兑现价值的地方：换 Init 在传统发行版里是重装级别的操作，在这里是改一行配置加一次 `rebuild`。
+
+`virtual/libc` 之所以是例外，与 Sage 的实现无关，而是 ABI 层面的事实：已编译的二进制在链接时就绑定了 glibc 的符号版本，而 musl 连 `libc.so.6` 都不提供。切换 libc 意味着仓库需要**并存一套完整的 musl 构建包集**——这是仓库层面的工程量，不是一次 `rebuild` 能解决的。
+
+因此本项目**保留 libc 可切换的设计能力**，但首轮只构建 glibc 一套包集；musl 支持在有余力维护第二套包集之前不予提供。
 
 ---
 
