@@ -556,6 +556,7 @@ def stage1_build_environment(
             "PKG_CONFIG_PATH",
             [str(usr / "lib/pkgconfig"), str(usr / "share/pkgconfig")],
         )
+        environment["PKG_CONFIG_SYSROOT_DIR"] = str(sysroot.resolve())
         prepend_environment(environment, "ACLOCAL_PATH", [str(usr / "share/aclocal")])
         prepend_environment(environment, "CMAKE_PREFIX_PATH", [str(usr)])
         autoconf_modules = usr / "share/autoconf"

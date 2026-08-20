@@ -182,6 +182,11 @@ def main() -> int:
         stage1_environment["SC_BUILD_SYSROOT"],
         "/fixture-stage1-sysroot",
     )
+    failed += not check(
+        "Stage1 rewrites pkg-config prefixes into its isolated sysroot",
+        stage1_environment["PKG_CONFIG_SYSROOT_DIR"],
+        "/fixture-stage1-sysroot",
+    )
     with tempfile.TemporaryDirectory() as directory:
         fixture = Path(directory)
         executable = fixture / "python3"
