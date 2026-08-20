@@ -216,7 +216,28 @@ def main() -> int:
             True,
         )
 
-    total = 28
+        glibc_output = Path(directory) / "glibc" / "recipe.toml"
+        build.render_stage1_recipe(
+            "glibc", build.resolve_architecture("aarch64"), glibc_output
+        )
+        failed += not check(
+            "Stage1 renderer resolves the dynamic linker capability",
+            "so:ld-linux-aarch64.so.1" in glibc_output.read_text(),
+            True,
+        )
+
+    hardcoded_arches = [
+        path.relative_to(REPO).as_posix()
+        for path in (REPO / "Stage1" / "recipes").glob("*/recipe.toml")
+        if any(name in path.read_text() for name in architectures)
+    ]
+    failed += not check(
+        "canonical Stage1 recipes do not hardcode a target architecture",
+        hardcoded_arches,
+        [],
+    )
+
+    total = 30
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

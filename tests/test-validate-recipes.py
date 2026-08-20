@@ -66,6 +66,16 @@ CASES: list[tuple[str, bool, str]] = [
         'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\nrelease = 1\ninstall = [\'echo hi\']\n',
     ),
     (
+        "an architecture-independent package may use arch any",
+        True,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\narch = "any"\ninstall = [\'echo hi\']\n',
+    ),
+    (
+        "an unknown package architecture is rejected",
+        False,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\narch = "mips64"\ninstall = [\'echo hi\']\n',
+    ),
+    (
         "a source url without a checksum is rejected by policy",
         False,
         MINIMAL + 'install = [\'echo hi\']\n[source]\nurl = "http://e/x.tar"\n',

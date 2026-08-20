@@ -27,6 +27,7 @@ GENERATED_TOP_LEVEL_DIRS = {"out"}
 MISSING_CHECKSUM = "[source] sha256 is required whenever url is set"
 INVALID_CHECKSUM = "[source] sha256 must be exactly 64 lowercase hexadecimal characters"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+PACKAGE_ARCHITECTURES = {"x86_64", "aarch64", "any"}
 
 # Recipes grandfathered in with a `sha256 = ""` placeholder, pinned BY PATH.
 #
@@ -135,6 +136,10 @@ def validate(path: Path) -> list[str]:
             errors.append(f"[package] {field} is required")
     for field in PACKAGE_STRINGS:
         require_string(pkg, field, "package", errors)
+    if isinstance(pkg.get("arch"), str) and pkg["arch"] not in PACKAGE_ARCHITECTURES:
+        errors.append(
+            "[package] arch must be one of: " + ", ".join(sorted(PACKAGE_ARCHITECTURES))
+        )
 
     src = data.get("source")
     if src is not None and not isinstance(src, dict):
