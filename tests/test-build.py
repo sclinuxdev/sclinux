@@ -426,8 +426,16 @@ def main() -> int:
         )
         failed += not check(
             "Stage1 scripts locate Autoconf modules inside the isolated sysroot",
-            interpreter_environment["autom4te_perllibdir"],
-            str(autoconf_modules),
+            {
+                interpreter_environment["autom4te_perllibdir"],
+                interpreter_environment["AC_MACRODIR"],
+            },
+            {str(autoconf_modules)},
+        )
+        failed += not check(
+            "Stage1 Autom4te loads its isolated configuration",
+            interpreter_environment["AUTOM4TE_CFG"],
+            str(autoconf_modules / "autom4te.cfg"),
         )
         failed += not check(
             "Stage1 Autotools scripts call sibling tools inside the isolated sysroot",

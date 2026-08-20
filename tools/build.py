@@ -561,6 +561,8 @@ def stage1_build_environment(
         autoconf_modules = usr / "share/autoconf"
         if autoconf_modules.is_dir():
             environment["autom4te_perllibdir"] = str(autoconf_modules)
+            environment["AC_MACRODIR"] = str(autoconf_modules)
+            environment["AUTOM4TE_CFG"] = str(autoconf_modules / "autom4te.cfg")
         for variable, command in (
             ("AUTOM4TE", "autom4te"),
             ("AUTOCONF", "autoconf"),
