@@ -673,7 +673,14 @@ def validate_stage1_package_shebangs(recipe_dir: Path, forbidden_roots: list[Pat
             raise ConfigError(f"Stage1 package shebang contains a build path: {path}")
 
 
-def stage1_dynamic_loader(architecture: dict[str, str]) -> str:
+def stage1_dynamic_loader(
+    architecture: dict[str, str], sysroot: Path | None = None
+) -> str:
+    if sysroot is not None:
+        for directory in ("usr/lib", "usr/lib64", "lib", "lib64"):
+            candidate = sysroot / directory / architecture["dynamic_linker"]
+            if candidate.is_file():
+                return str(candidate.resolve())
     directory = "/lib64" if architecture["arch"] == "x86_64" else "/lib"
     return f"{directory}/{architecture['dynamic_linker']}"
 
@@ -707,7 +714,7 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 )
             wrapper.write_text(
                 "#!/bin/sh\n"
-                f"exec {shlex.quote(stage1_dynamic_loader(architecture))} "
+                f"exec {shlex.quote(stage1_dynamic_loader(architecture, sysroot))} "
                 f"--library-path {shlex.quote(library_path)} "
                 '--argv0 "$0" '
                 f"{shlex.quote(str(executable))}{interpreter_options} \"$@\"\n"

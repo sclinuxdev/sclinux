@@ -446,6 +446,17 @@ def main() -> int:
             f" -I{perl_root} " in perl_wrapper and "PERL5LIB" not in perl_wrapper,
             True,
         )
+        target_loader = sysroot_library / "ld-linux-aarch64.so.1"
+        target_loader.write_bytes(b"\x7fELFfixture")
+        build.refresh_stage1_tool_wrappers(
+            sysroot_library.parents[1], build.resolve_architecture("aarch64")
+        )
+        failed += not check(
+            "Stage1 switches to its own dynamic loader after glibc is staged",
+            f"exec {target_loader.resolve()} --library-path"
+            in (wrapper_root / "pkgconf").read_text(),
+            True,
+        )
         interpreter_environment = build.stage1_build_environment(
             seed, sysroot_library.parents[1]
         )
