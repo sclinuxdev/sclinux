@@ -1,7 +1,7 @@
 # Sage Linux Stage 1 构建清单（全量重建，不继承）
 # - 顺序 = 依赖拓扑排序（recipe 的 dependencies + build_dependencies 自动生成，
 #   重放：python3 stage1/scripts/gen-order.py --write）；batch 字段仅为设计分组标记。
-# - 所有 102 个包 action = "build"：stage1 在 stage0 chroot（/mnt）内全量重建。
+# - 所有 107 个包 action = "build"：stage1 在 stage0 chroot（/mnt）内全量重建。
 # - 默认只构建不安装（STAGE1_INSTALL=1 时逐包安装进构建 chroot 供后续构建依赖）。
 schema_version = 1
 stage = 1
@@ -530,7 +530,32 @@ batch = "F"
 action = "build"
 
 [[packages]]
+name = "libarchive"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "cmake"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "fastfetch"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "linux-zen"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "mkinitcpio"
+batch = "F"
+action = "build"
+
+[[packages]]
 name = "base"
 batch = "F"
 action = "build"
-note = "2.0.0 元包，依赖全部 101 包"
+note = "2.0.0 元包，依赖全部 106 包"

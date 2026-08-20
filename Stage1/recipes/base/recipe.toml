@@ -59,6 +59,9 @@ dependencies = [
     "openssl-libs",
     "openssl-dev",
     "curl",
+    "libarchive",
+    "cmake",
+    "fastfetch",
     "tomlplusplus",
     "sage",
     "util-linux",
@@ -110,6 +113,8 @@ dependencies = [
     "systemd",
     "dbus",
     "man-db",
+    "linux-zen",
+    "mkinitcpio",
 ]
 
 provides = [

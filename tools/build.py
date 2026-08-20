@@ -17,6 +17,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO / "config" / "architectures.toml"
 DEFAULT_SEED_LOCK = REPO / "Stage0" / "seed.lock.toml"
+DEFAULT_MANIFEST = REPO / "Stage1" / "manifest.toml"
 DEFAULT_RECIPES = REPO / "Stage1" / "recipes"
 ARCH_NAME = re.compile(r"^[a-z0-9_]+$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -209,6 +210,117 @@ def render_stage1_recipe(recipe: str, architecture: dict[str, str], output: Path
     return output
 
 
+def recipe_dependencies(path: Path) -> set[str]:
+    try:
+        data = tomllib.loads(path.read_text())
+    except FileNotFoundError as exc:
+        raise ConfigError(f"Stage1 recipe does not exist: {path}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
+
+    dependencies: set[str] = set()
+    for table in (data, data.get("package", {}), data.get("source", {})):
+        if not isinstance(table, dict):
+            continue
+        for field in ("dependencies", "build_dependencies"):
+            values = table.get(field, [])
+            if isinstance(values, list):
+                dependencies.update(value.split(maxsplit=1)[0] for value in values)
+    return dependencies
+
+
+def load_stage1_manifest(path: Path = DEFAULT_MANIFEST) -> list[str]:
+    try:
+        data = tomllib.loads(path.read_text())
+    except FileNotFoundError as exc:
+        raise ConfigError(f"Stage1 manifest does not exist: {path}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
+
+    if set(data) != {"schema_version", "stage", "packages"}:
+        raise ConfigError("Stage1 manifest must contain only schema_version, stage, and packages")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ConfigError("Stage1 schema_version must be the integer 1")
+    if type(data["stage"]) is not int or data["stage"] != 1:
+        raise ConfigError("Stage1 stage must be the integer 1")
+    packages = data["packages"]
+    if not isinstance(packages, list) or not packages:
+        raise ConfigError("Stage1 packages must be a non-empty array of tables")
+
+    names: list[str] = []
+    allowed_fields = {"name", "batch", "action", "note"}
+    for index, package in enumerate(packages):
+        if not isinstance(package, dict) or set(package) - allowed_fields:
+            raise ConfigError(f"invalid Stage1 package entry at index {index}")
+        name = package.get("name")
+        if not isinstance(name, str) or not PACKAGE_NAME.fullmatch(name):
+            raise ConfigError(f"invalid Stage1 package name at index {index}")
+        if not isinstance(package.get("batch"), str) or not package["batch"]:
+            raise ConfigError(f"Stage1 package {name} must have a batch")
+        if package.get("action") != "build":
+            raise ConfigError(f"Stage1 package {name} action must be 'build'")
+        if "note" in package and not isinstance(package["note"], str):
+            raise ConfigError(f"Stage1 package {name} note must be a string")
+        names.append(name)
+
+    if len(names) != len(set(names)):
+        duplicates = sorted(name for name in set(names) if names.count(name) > 1)
+        raise ConfigError(f"duplicate Stage1 package(s): {', '.join(duplicates)}")
+
+    recipe_names = {path.parent.name for path in DEFAULT_RECIPES.glob("*/recipe.toml")}
+    missing = recipe_names - set(names)
+    unknown = set(names) - recipe_names
+    if missing or unknown:
+        details = []
+        if missing:
+            details.append(f"missing from manifest: {', '.join(sorted(missing))}")
+        if unknown:
+            details.append(f"missing recipe: {', '.join(sorted(unknown))}")
+        raise ConfigError("Stage1 manifest and recipes differ; " + "; ".join(details))
+
+    positions = {name: index for index, name in enumerate(names)}
+    for name in names:
+        dependencies = recipe_dependencies(DEFAULT_RECIPES / name / "recipe.toml")
+        unresolved = sorted(
+            dependency
+            for dependency in dependencies
+            if dependency not in recipe_names
+            and not dependency.startswith(("virtual/", "so:"))
+        )
+        if unresolved:
+            raise ConfigError(f"Stage1 package {name} has no recipe for: {', '.join(unresolved)}")
+        late = sorted(
+            dependency
+            for dependency in dependencies & recipe_names
+            if positions[dependency] > positions[name]
+        )
+        if late:
+            raise ConfigError(f"Stage1 package {name} precedes dependency: {', '.join(late)}")
+
+    base_dependencies = recipe_dependencies(DEFAULT_RECIPES / "base" / "recipe.toml")
+    expected_base = recipe_names - {"base"}
+    if base_dependencies != expected_base:
+        missing_base = expected_base - base_dependencies
+        extra_base = base_dependencies - expected_base
+        details = []
+        if missing_base:
+            details.append(f"missing: {', '.join(sorted(missing_base))}")
+        if extra_base:
+            details.append(f"unknown: {', '.join(sorted(extra_base))}")
+        raise ConfigError("Stage1 base dependency set differs; " + "; ".join(details))
+    return names
+
+
+def render_stage1_recipes(
+    architecture: dict[str, str], output: Path, manifest: Path = DEFAULT_MANIFEST
+) -> list[Path]:
+    names = load_stage1_manifest(manifest)
+    return [
+        render_stage1_recipe(name, architecture, output / name / "recipe.toml")
+        for name in names
+    ]
+
+
 def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str) -> list[str]:
     try:
         manifest_digest = seed["manifests"][name]
@@ -310,6 +422,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     recipe.add_argument("recipe", help="recipe name under Stage1/recipes")
     recipe.add_argument("--output", type=Path, help="override the rendered recipe path")
+    recipes = commands.add_parser(
+        "stage1-recipes", help="validate the Stage1 manifest and render every recipe"
+    )
+    recipes.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    recipes.add_argument("--output-dir", type=Path, help="override the rendered recipe directory")
     return parser.parse_args(argv)
 
 
@@ -357,6 +474,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {rendered.relative_to(REPO)}")
         except ValueError:
             print(f"wrote {rendered}")
+    elif args.command == "stage1-recipes":
+        output = args.output_dir or REPO / "out" / args.arch / "recipes"
+        try:
+            rendered = render_stage1_recipes(architecture, output, args.manifest)
+        except (ConfigError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"wrote {len(rendered)} Stage1 recipes under {output}")
     return 0
 
 

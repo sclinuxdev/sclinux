@@ -139,6 +139,18 @@ def main() -> int:
         True,
     )
 
+    stage1_packages = build.load_stage1_manifest()
+    failed += not check(
+        "Stage1 manifest covers every canonical recipe",
+        len(stage1_packages),
+        107,
+    )
+    failed += not check(
+        "Stage1 dependency order leaves the base meta-package last",
+        stage1_packages[-1],
+        "base",
+    )
+
     with tempfile.TemporaryDirectory() as directory:
         output = Path(directory) / "sage" / "recipe.toml"
         build.render_stage1_recipe(
@@ -162,6 +174,24 @@ def main() -> int:
             "canonical Stage1 recipes remain architecture-neutral",
             "arch" in canonical["package"],
             False,
+        )
+
+        all_output = Path(directory) / "all-recipes"
+        all_rendered = build.render_stage1_recipes(
+            build.resolve_architecture("aarch64"), all_output
+        )
+        failed += not check(
+            "Stage1 renderer emits every manifest package",
+            len(all_rendered),
+            107,
+        )
+        failed += not check(
+            "Stage1 renderer assigns one target architecture to every package",
+            {
+                build.tomllib.loads(path.read_text())["package"]["arch"]
+                for path in all_rendered
+            },
+            {"aarch64"},
         )
 
         linux_output = Path(directory) / "linux-zen" / "recipe.toml"
@@ -237,7 +267,7 @@ def main() -> int:
         [],
     )
 
-    total = 30
+    total = 34
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
