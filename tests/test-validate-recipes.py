@@ -105,8 +105,59 @@ CASES: list[tuple[str, bool, str]] = [
 ]
 
 
-def main() -> int:
+# The count-based version of this rule accepted a change that added one
+# checksumless recipe while resolving one legacy placeholder, because the total
+# stayed the same. These pin the set semantics that replaced it.
+DEBT_CASES: list[tuple[str, set[str], set[str], set[str], set[str]]] = [
+    (
+        "steady state: everything owed is grandfathered",
+        {"a", "b"}, {"a", "b"},
+        set(), set(),
+    ),
+    (
+        "one added and one resolved -- the count is unchanged, both must surface",
+        {"a", "b"}, {"a", "c"},
+        {"c"}, {"b"},
+    ),
+    (
+        "a newly added checksumless recipe is a violation",
+        {"a"}, {"a", "b"},
+        {"b"}, set(),
+    ),
+    (
+        "a resolved entry left in the file must be de-listed",
+        {"a", "b"}, {"a"},
+        set(), {"b"},
+    ),
+    (
+        "an empty file means every placeholder is a violation",
+        set(), {"a", "b"},
+        {"a", "b"}, set(),
+    ),
+    (
+        "debt fully paid off",
+        {"a"}, set(),
+        set(), {"a"},
+    ),
+]
+
+
+def check_debt_rule() -> int:
     failed = 0
+    for description, grandfathered, owed, want_violations, want_resolved in DEBT_CASES:
+        violations, resolved = validator.classify_debt(grandfathered, owed)
+        if (violations, resolved) == (want_violations, want_resolved):
+            print(f"ok    {description}")
+        else:
+            failed += 1
+            print(f"FAIL  {description}")
+            print(f"        expected violations={want_violations!r} resolved={want_resolved!r}")
+            print(f"        got      violations={violations!r} resolved={resolved!r}")
+    return failed
+
+
+def main() -> int:
+    failed = check_debt_rule()
     for description, should_pass, toml in CASES:
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "recipe.toml"
@@ -122,7 +173,8 @@ def main() -> int:
             for err in errors:
                 print(f"        {err}")
 
-    print(f"\n{len(CASES) - failed} passed, {failed} failed")
+    total = len(CASES) + len(DEBT_CASES)
+    print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
 
