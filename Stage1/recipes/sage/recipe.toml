@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "6"
+release = "7"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
@@ -30,7 +30,7 @@ prepare = [
 ]
 
 build = [
-    "XMAKE_ROOT=y XMAKE_STATS=false xmake f -c -m release -y",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake f -c -m release -y --ldflags=\"$LDFLAGS\"",
     "XMAKE_ROOT=y XMAKE_STATS=false xmake -y",
 ]
 

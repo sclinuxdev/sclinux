@@ -272,6 +272,11 @@ def main() -> int:
             ['patch -p1 < "$RECIPE_DIR/sage-reproducible-archives.patch"'],
         )
         failed += not check(
+            "Stage1 Sage passes the isolated sysroot to xmake links",
+            '--ldflags="$LDFLAGS"' in rendered["package"]["build"][0],
+            True,
+        )
+        failed += not check(
             "canonical Stage1 recipes remain architecture-neutral",
             "arch" in canonical["package"],
             False,
