@@ -34,7 +34,21 @@ def slug(heading: str) -> str:
 
 def anchors_of(text: str) -> set[str]:
     # Headings inside fenced code blocks are not headings.
-    return {slug(h) for h in HEADING.findall(FENCE.sub("", text))}
+    anchors: set[str] = set()
+    for heading in HEADING.findall(FENCE.sub("", text)):
+        base = slug(heading)
+        anchor = base
+        suffix = 0
+        while anchor in anchors:
+            suffix += 1
+            anchor = f"{base}-{suffix}"
+        anchors.add(anchor)
+    return anchors
+
+
+def links_of(text: str) -> list[str]:
+    # Markdown-looking examples inside fenced code blocks are not links.
+    return LINK.findall(FENCE.sub("", text))
 
 
 def main() -> int:
@@ -49,7 +63,7 @@ def main() -> int:
         text = path.read_text()
         own_anchors = anchors_of(text)
 
-        for target in LINK.findall(text):
+        for target in links_of(text):
             if target.startswith(("http://", "https://", "mailto:")):
                 continue
 
