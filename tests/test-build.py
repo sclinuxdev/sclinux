@@ -438,6 +438,11 @@ def main() -> int:
             str(autoconf_modules / "autom4te.cfg"),
         )
         failed += not check(
+            "Stage1 Autoconf loads its isolated trailer",
+            interpreter_environment["trailer_m4"],
+            str(autoconf_modules / "autoconf/trailer.m4"),
+        )
+        failed += not check(
             "Stage1 Autotools scripts call sibling tools inside the isolated sysroot",
             interpreter_environment["AUTOM4TE"],
             f"{sysroot_binary.parent / 'autom4te'} --prepend-include={autoconf_modules}",

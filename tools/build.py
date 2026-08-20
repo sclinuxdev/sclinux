@@ -563,6 +563,7 @@ def stage1_build_environment(
             environment["autom4te_perllibdir"] = str(autoconf_modules)
             environment["AC_MACRODIR"] = str(autoconf_modules)
             environment["AUTOM4TE_CFG"] = str(autoconf_modules / "autom4te.cfg")
+            environment["trailer_m4"] = str(autoconf_modules / "autoconf/trailer.m4")
         for variable, command in (
             ("AUTOM4TE", "autom4te"),
             ("AUTOCONF", "autoconf"),
