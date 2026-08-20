@@ -11,8 +11,12 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 on the x86_64 build host
+    import tomli as tomllib
 
 
 REPO = Path(__file__).resolve().parent.parent
