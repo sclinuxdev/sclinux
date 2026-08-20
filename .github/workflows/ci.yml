@@ -24,6 +24,9 @@ jobs:
       # Field names and types are checked against what sage's parse_toml
       # actually reads; an unknown key is silently ignored by sage, so it is
       # almost always a typo.
+      - name: recipe validator fixtures
+        run: python3 tests/test-validate-recipes.py
+
       - name: recipe schema
         run: python3 tests/validate-recipes.py
 
