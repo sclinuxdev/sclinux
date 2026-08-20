@@ -708,6 +708,7 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 "#!/bin/sh\n"
                 f"exec {shlex.quote(stage1_dynamic_loader(architecture))} "
                 f"--library-path {shlex.quote(library_path)} "
+                '--argv0 "$0" '
                 f"{shlex.quote(str(executable))}{interpreter_options} \"$@\"\n"
             )
             wrapper.chmod(0o755)

@@ -426,6 +426,7 @@ def main() -> int:
         failed += not check(
             "Stage1 tool wrappers do not leak target libraries to child processes",
             "exec /lib/ld-linux-aarch64.so.1 --library-path" in wrapper
+            and '--argv0 "$0"' in wrapper
             and "LD_LIBRARY_PATH" not in wrapper,
             True,
         )
