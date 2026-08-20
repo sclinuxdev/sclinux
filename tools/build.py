@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     import tomllib
@@ -438,6 +439,104 @@ def write_sources_lock(sources: list[dict], path: Path) -> Path:
     return path
 
 
+def source_filename(url: str) -> str:
+    filename = Path(urlsplit(url).path).name
+    return filename or "source.tar.gz"
+
+
+def clean_stage1_recipe(recipe_dir: Path, package: str) -> None:
+    for directory in ("distfiles", "src", "pkg"):
+        shutil.rmtree(recipe_dir / directory, ignore_errors=True)
+    for artifact in recipe_dir.glob(f"{package}-*.pkg.tar.zst"):
+        artifact.unlink()
+
+
+def clean_stage1_workdirs(recipe_dir: Path) -> None:
+    for directory in ("distfiles", "src", "pkg"):
+        shutil.rmtree(recipe_dir / directory, ignore_errors=True)
+
+
+def stage_recipe_source(recipe_path: Path, source_cache: Path) -> Path | None:
+    data = tomllib.loads(recipe_path.read_text())
+    source = data.get("source")
+    if source is None:
+        return None
+    digest = source["sha256"]
+    cached = source_cache / digest
+    if not cached.is_file() or sha256_file(cached) != digest:
+        raise ConfigError(f"source is absent or corrupt for {data['package']['name']}: {cached}")
+    destination = recipe_path.parent / "distfiles" / source_filename(source["url"])
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(cached, destination)
+    return destination
+
+
+def select_stage1_packages(
+    packages: list[str], first: str | None = None, last: str | None = None
+) -> list[str]:
+    for name, label in ((first, "first"), (last, "last")):
+        if name is not None and name not in packages:
+            raise ConfigError(f"unknown {label} Stage1 package: {name}")
+    start = packages.index(first) if first is not None else 0
+    stop = packages.index(last) + 1 if last is not None else len(packages)
+    if start >= stop:
+        raise ConfigError("Stage1 package range is reversed")
+    return packages[start:stop]
+
+
+def run_stage1_packages(
+    architecture: dict[str, str],
+    workspace: Path,
+    first: str | None = None,
+    last: str | None = None,
+    sage: str = "sage",
+) -> list[dict]:
+    packages = select_stage1_packages(load_stage1_manifest(), first, last)
+    recipes = workspace / "recipes"
+    sources = workspace / "sources"
+    locked = []
+    for name in packages:
+        recipe_path = recipes / name / "recipe.toml"
+        if not recipe_path.is_file():
+            raise ConfigError(f"rendered Stage1 recipe does not exist: {recipe_path}")
+        data = tomllib.loads(recipe_path.read_text())
+        package = data["package"]
+        if package.get("arch") != architecture["arch"]:
+            raise ConfigError(f"rendered Stage1 recipe has wrong architecture: {name}")
+        clean_stage1_recipe(recipe_path.parent, name)
+        stage_recipe_source(recipe_path, sources)
+        try:
+            subprocess.run([sage, "build", str(recipe_path.parent)], check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ConfigError(f"Stage1 package build failed: {name}: {exc}") from exc
+        artifact = recipe_path.parent / (
+            f"{name}-{package['version']}-{package.get('release', '1')}-"
+            f"{architecture['arch']}.pkg.tar.zst"
+        )
+        if not artifact.is_file():
+            raise ConfigError(f"Stage1 package artifact is missing: {artifact}")
+        locked.append(
+            {
+                "name": name,
+                "version": package["version"],
+                "release": package.get("release", "1"),
+                "arch": architecture["arch"],
+                "sha256": sha256_file(artifact),
+                "recipe_sha256": sha256_file(recipe_path),
+                "artifact": artifact.name,
+            }
+        )
+        clean_stage1_workdirs(recipe_path.parent)
+        write_packages_lock(locked, workspace / "packages.lock")
+    return locked
+
+
+def write_packages_lock(packages: list[dict], path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema_version": 1, "packages": packages}, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str) -> list[str]:
     try:
         manifest_digest = seed["manifests"][name]
@@ -561,6 +660,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="rewrite a URL prefix for transport; may be repeated",
     )
     fetch.add_argument("--offline", action="store_true", help="verify cache without downloading")
+    stage1_run = commands.add_parser(
+        "stage1-run", help="run rendered Stage1 recipes inside an architecture-matched Stage0"
+    )
+    stage1_run.add_argument("--workspace", type=Path, required=True)
+    stage1_run.add_argument("--first", help="start at this manifest package")
+    stage1_run.add_argument("--last", help="stop after this manifest package")
+    stage1_run.add_argument("--sage", default="sage", help="Sage executable inside Stage0")
     return parser.parse_args(argv)
 
 
@@ -627,6 +733,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"verified {len(locked)} Stage1 sources; wrote {lock}")
+    elif args.command == "stage1-run":
+        try:
+            locked = run_stage1_packages(
+                architecture, args.workspace, args.first, args.last, args.sage
+            )
+        except (ConfigError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"built {len(locked)} Stage1 package(s); wrote {args.workspace / 'packages.lock'}")
     return 0
 
 

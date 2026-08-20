@@ -249,6 +249,74 @@ def main() -> int:
             json.loads(lock_path.read_text())["sources"][0]["sha256"],
             digest,
         )
+
+        failed += not check(
+            "Stage1 source filenames ignore URL query parameters",
+            build.source_filename("https://example.invalid/source.tar.gz?download=1"),
+            "source.tar.gz",
+        )
+        failed += not check(
+            "Stage1 package ranges include both endpoints",
+            build.select_stage1_packages(["one", "two", "three"], "two", "three"),
+            ["two", "three"],
+        )
+        try:
+            build.select_stage1_packages(["one", "two"], "two", "one")
+        except build.ConfigError as exc:
+            range_error = str(exc)
+        else:
+            range_error = "no error"
+        failed += not check(
+            "Stage1 rejects reversed package ranges",
+            range_error,
+            "Stage1 package range is reversed",
+        )
+
+        fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
+        fixture_recipe.parent.mkdir()
+        fixture_recipe.write_text(
+            "[package]\n"
+            'name = "fixture"\n'
+            'version = "1.0"\n'
+            'arch = "aarch64"\n\n'
+            "[source]\n"
+            'url = "https://example.invalid/source.tar?download=1"\n'
+            f'sha256 = "{digest}"\n'
+        )
+        (cache / digest).write_bytes(payload)
+        staged = build.stage_recipe_source(fixture_recipe, cache)
+        failed += not check(
+            "Stage1 stages a verified source under its upstream filename",
+            staged.relative_to(fixture_recipe.parent).as_posix(),
+            "distfiles/source.tar",
+        )
+        staged.write_bytes(b"changed build copy")
+        failed += not check(
+            "Stage1 build copies cannot mutate the content-addressed cache",
+            (cache / digest).read_bytes(),
+            payload,
+        )
+
+        package_lock = build.write_packages_lock(
+            [
+                {
+                    "name": "fixture",
+                    "version": "1.0",
+                    "release": "1",
+                    "arch": "aarch64",
+                    "sha256": digest,
+                    "recipe_sha256": digest,
+                    "artifact": "fixture-1.0-1-aarch64.pkg.tar.zst",
+                }
+            ],
+            Path(directory) / "packages.lock",
+        )
+        failed += not check(
+            "Stage1 package lock records the built architecture",
+            json.loads(package_lock.read_text())["packages"][0]["arch"],
+            "aarch64",
+        )
+
         (cache / digest).write_bytes(b"corrupt")
         try:
             build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
@@ -335,7 +403,7 @@ def main() -> int:
         [],
     )
 
-    total = 42
+    total = 48
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
