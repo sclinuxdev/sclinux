@@ -367,6 +367,17 @@ def main() -> int:
             digest,
         )
 
+        sysroot_library = Path(directory) / "build-sysroot" / "usr/lib"
+        sysroot_library.mkdir(parents=True)
+        (sysroot_library / "legacy.la").write_text("libdir='/usr/lib'\n")
+        (sysroot_library / "runtime.so").write_bytes(payload)
+        build.clean_stage1_build_sysroot(sysroot_library.parents[1])
+        failed += not check(
+            "Stage1 drops path-bound libtool metadata only from its build sysroot",
+            sorted(path.name for path in sysroot_library.iterdir()),
+            ["runtime.so"],
+        )
+
         (cache / digest).write_bytes(b"corrupt")
         try:
             build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
@@ -453,7 +464,7 @@ def main() -> int:
         [],
     )
 
-    total = 55
+    total = 56
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

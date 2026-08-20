@@ -592,6 +592,14 @@ def stage_stage1_package(
     stamp.write_text(entry["sha256"] + "\n")
 
 
+def clean_stage1_build_sysroot(sysroot: Path) -> None:
+    library_root = sysroot / "usr/lib"
+    if not library_root.is_dir():
+        return
+    for archive in library_root.rglob("*.la"):
+        archive.unlink()
+
+
 def run_stage1_packages(
     architecture: dict[str, str],
     workspace: Path,
@@ -621,6 +629,7 @@ def run_stage1_packages(
         stage_stage1_package(
             locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
         )
+    clean_stage1_build_sysroot(sysroot)
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
@@ -639,6 +648,7 @@ def run_stage1_packages(
         built.append(entry)
         locked_by_name[name] = entry
         stage_stage1_package(entry, recipe_path, sysroot, environment)
+        clean_stage1_build_sysroot(sysroot)
         clean_stage1_workdirs(recipe_path.parent)
         locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
