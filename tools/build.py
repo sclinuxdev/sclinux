@@ -713,6 +713,20 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
             wrapper.chmod(0o755)
 
 
+def validate_stage1_procfs(
+    proc_exe: Path = Path("/proc/self/exe"), executable: Path | None = None
+) -> None:
+    if not proc_exe.is_symlink():
+        return
+    expected = (executable or Path(sys.executable)).resolve()
+    observed = proc_exe.resolve()
+    if observed != expected:
+        raise ConfigError(
+            "Stage1 /proc/self/exe does not identify the current Python executable; "
+            "mount procfs or empty /proc before entering Stage0"
+        )
+
+
 def run_stage1_packages(
     architecture: dict[str, str],
     workspace: Path,
@@ -721,6 +735,7 @@ def run_stage1_packages(
     sage: str = "sage",
     sysroot: Path | None = None,
 ) -> list[dict]:
+    validate_stage1_procfs()
     manifest = load_stage1_manifest()
     packages = select_stage1_packages(manifest, first, last)
     recipes = workspace / "recipes"

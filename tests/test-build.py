@@ -182,6 +182,25 @@ def main() -> int:
         stage1_environment["SC_BUILD_SYSROOT"],
         "/fixture-stage1-sysroot",
     )
+    with tempfile.TemporaryDirectory() as directory:
+        fixture = Path(directory)
+        executable = fixture / "python3"
+        stale = fixture / "xmake"
+        executable.touch()
+        stale.touch()
+        proc_exe = fixture / "proc-self-exe"
+        proc_exe.symlink_to(stale)
+        try:
+            build.validate_stage1_procfs(proc_exe, executable)
+        except build.ConfigError as exc:
+            procfs_error = str(exc)
+        else:
+            procfs_error = "no error"
+    failed += not check(
+        "Stage1 rejects a stale procfs executable snapshot",
+        "mount procfs or empty /proc" in procfs_error,
+        True,
+    )
     sage_source = build.source_for_package("sage")
     failed += not check(
         "Stage0 receives the locked Sage source identity",
