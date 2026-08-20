@@ -122,11 +122,32 @@ graph TB
 pkgname-1.0.0-1.pkg.tar.zst
 ├── .METADATA/
 │   ├── manifest.toml     # 包名、版本、构建号、许可证、Provides、依赖关系
-│   ├── files.idx         # 相对路径、文件大小、权限 Mode、SHA256 校验和
-│   ├── triggers.toml     # Initramfs、ldconfig、引导加载程序等触发器 Hook
 │   └── service.toml      # 通用守护进程规范定义 (可选)
 └── data/                 # 直接映射落盘的文件系统载荷 (usr/bin/..., etc/...)
 ```
+
+> [!WARNING]
+> **以上是当前实现的完整内容。** 打包与解包代码只处理 `manifest.toml` 与 `service.toml` 两个条目。早期文档中列出的 `files.idx`（逐文件 SHA256 校验索引）与 `triggers.toml`（包级触发器）**在源码中不存在**，已从本图移除。
+>
+> 两者缺失的实际后果：
+> - **无逐文件完整性校验**。文件所有权记录在 LMDB 的 `files` 表中（用于反查与冲突检测），但归档不携带逐文件校验和。这也是 `sage query files` 不存在的原因。
+> - **无包级触发器**。见下文「触发器机制」。
+
+### 触发器机制
+
+不存在包自带的 `triggers.toml`。实际实现是 `sage.rebuild` 中一个**硬编码的三钩子引擎**，在整笔事务结束后（安装与卸载都会）根据本次变动的文件路径决定是否执行：
+
+| 条件 | 动作 |
+| :--- | :--- |
+| 变动了 `usr/lib/` 或 `lib/` 下的 `.so` | `ldconfig` |
+| 变动了 `etc/ssl/certs/` 或 `usr/share/ca-certificates/` | `update-ca-certificates` |
+| 变动了 `usr/share/mime/` | `update-mime-database` |
+
+每个动作每笔事务最多执行一次，与命中文件数无关。
+
+> ⚠️ **没有 initramfs 触发器，也没有引导器触发器。** 因此 `sage --root /mnt install base` 不会生成 initramfs、不会同步内核到 ESP。本仓库的根文件系统位于 LVM thin 之上，缺少含 LVM 工具的 initramfs 将直接导致无法启动——装机流程必须自行 chroot 执行这两步，见 [INSTALLATION.md §7](INSTALLATION.md)。
+>
+> 另：三个钩子中曾有两个未在 sysroot 内执行（会改到宿主机而非目标），修复见 [antinomie1/sage#4](https://github.com/antinomie1/sage/pull/4)。
 
 ### ELF 符号自动提取：
 打包阶段 `sage build` 会自动遍历 `data/` 目录中的 ELF 目标：

@@ -122,7 +122,9 @@ systemd-boot 是 EFI stub 加载器，**只从 ESP 读取**，完全不接触 XF
 bootctl --esp-path=/mnt/boot/efi install
 ```
 
-代价是内核必须置于 ESP（已在 §3 布局中预留空间），以及 ESP 内容需与内核包同步——由 `sage` 的 triggers 机制负责。
+代价是内核必须置于 ESP（已在 §3 布局中预留空间），以及 ESP 内容需与内核包保持同步。
+
+> ⚠️ **该同步目前没有自动机制。** `sage` 的触发器引擎不含引导器与 initramfs 钩子，内核更新后必须手工重新执行 §7.1 的两步，否则系统将无法启动。
 
 ### 4.3 备选：GRUB
 
@@ -246,14 +248,49 @@ TOML
 
 # 生成 fstab（使用 UUID，不依赖设备名顺序）
 genfstab -U /mnt >> /mnt/etc/fstab
-
-# 安装引导器
-bootctl --esp-path=/mnt/boot/efi install
 ```
 
-### 7.1 initramfs 要求
+**到这里文件树是完整的，但系统还不能启动。** 必须继续执行 §7.1。
 
-根文件系统位于 thin LV 之上，initramfs **必须包含 LVM 用户空间工具与 device-mapper 模块**，否则内核无法激活卷组、找不到根设备。这是本布局相对普通分区方案唯一增加的 bootstrap 要求。
+### 7.1 必须手工执行的收尾步骤
+
+> [!CAUTION]
+> **`sage` 不会替你做这两步。** 它的触发器引擎只覆盖 `ldconfig`、证书与 MIME 三项，**既没有 initramfs 触发器，也没有引导器触发器**。
+> 跳过本节的直接后果是：安装全程无任何报错，重启后 **kernel panic，找不到根设备**。
+
+这不是 `sage` 的缺陷——Arch 要手工 `mkinitcpio -P`，Debian 要手工配置，**所有发行版的装机流程都显式做这两步**。只是不能指望包管理器代劳。
+
+两步都必须 **chroot 进目标系统执行**，原因与 §7 同理：在宿主机上跑，更新的是宿主机。
+
+```bash
+# 挂载 chroot 所需的伪文件系统
+mount --bind /dev  /mnt/dev
+mount --bind /proc /mnt/proc
+mount --bind /sys  /mnt/sys
+
+chroot /mnt /bin/bash
+```
+
+**第一步：生成 initramfs。**
+
+根文件系统位于 thin LV 之上，initramfs **必须包含 LVM 用户空间工具与 device-mapper 模块**，否则内核起来后无法激活卷组，也就找不到 `/`。这是本布局相对普通分区方案唯一增加的 bootstrap 要求。
+
+以 mkinitcpio 为例，`HOOKS` 中必须包含 `lvm2`，且位于 `filesystems` 之前：
+
+```bash
+# /etc/mkinitcpio.conf
+HOOKS=(base udev autodetect modconf block lvm2 filesystems keyboard fsck)
+
+mkinitcpio -P
+```
+
+**第二步：安装引导器并写入引导项。**
+
+```bash
+bootctl install
+```
+
+内核与 initramfs 需位于 ESP（§4.2 已为此预留 1 GiB）。后续内核更新同样需要重新执行这两步——在 `triggers.toml` 落地前，这需要外部机制保证，否则更新内核后系统将无法启动。
 
 ---
 
