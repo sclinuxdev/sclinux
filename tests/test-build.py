@@ -170,7 +170,7 @@ def main() -> int:
     failed += not check(
         "Stage1 searches its isolated tools before Stage0",
         stage1_environment["PATH"].split(":")[0],
-        "/fixture-stage1-sysroot/usr/bin",
+        "/fixture-stage1-sysroot/.stage1-tool-wrappers/usr-bin",
     )
     failed += not check(
         "Stage1 links against its isolated package libraries",
@@ -378,6 +378,19 @@ def main() -> int:
             ["runtime.so"],
         )
 
+        sysroot_binary = sysroot_library.parent / "bin/pkgconf"
+        sysroot_binary.parent.mkdir(parents=True)
+        sysroot_binary.write_bytes(b"\x7fELFfixture")
+        sysroot_binary.chmod(0o755)
+        (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
+        build.refresh_stage1_tool_wrappers(sysroot_library.parents[1])
+        wrapper_root = sysroot_library.parents[1] / ".stage1-tool-wrappers/usr-bin"
+        failed += not check(
+            "Stage1 wraps only target ELF tools with their isolated runtime libraries",
+            sorted(path.name for path in wrapper_root.iterdir()),
+            ["pkg-config", "pkgconf"],
+        )
+
         (cache / digest).write_bytes(b"corrupt")
         try:
             build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
@@ -464,7 +477,7 @@ def main() -> int:
         [],
     )
 
-    total = 56
+    total = 57
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

@@ -509,12 +509,20 @@ def stage1_build_environment(
     )
     if sysroot is not None:
         usr = sysroot / "usr"
+        wrappers = sysroot / ".stage1-tool-wrappers"
         libraries = [str(usr / "lib"), str(sysroot / "lib")]
         includes = [str(usr / "include")]
         prepend_environment(
             environment,
             "PATH",
-            [str(usr / "bin"), str(usr / "sbin"), str(sysroot / "bin"), str(sysroot / "sbin")],
+            [
+                str(wrappers / "usr-bin"),
+                str(wrappers / "usr-sbin"),
+                str(usr / "bin"),
+                str(usr / "sbin"),
+                str(sysroot / "bin"),
+                str(sysroot / "sbin"),
+            ],
         )
         prepend_environment(environment, "LIBRARY_PATH", libraries)
         prepend_environment(environment, "CPATH", includes)
@@ -600,6 +608,44 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         archive.unlink()
 
 
+def refresh_stage1_tool_wrappers(sysroot: Path) -> None:
+    wrapper_root = sysroot / ".stage1-tool-wrappers"
+    shutil.rmtree(wrapper_root, ignore_errors=True)
+    resolved_sysroot = sysroot.resolve()
+    library_path = ":".join(
+        str(path)
+        for path in (
+            sysroot / "usr/lib",
+            sysroot / "usr/lib64",
+            sysroot / "lib",
+            sysroot / "lib64",
+        )
+    )
+    for relative, wrapper_name in (("usr/bin", "usr-bin"), ("usr/sbin", "usr-sbin")):
+        source = sysroot / relative
+        if not source.is_dir():
+            continue
+        destination = wrapper_root / wrapper_name
+        destination.mkdir(parents=True, exist_ok=True)
+        for executable in source.iterdir():
+            try:
+                resolved = executable.resolve(strict=True)
+                resolved.relative_to(resolved_sysroot)
+                with resolved.open("rb") as stream:
+                    is_elf = stream.read(4) == b"\x7fELF"
+            except (FileNotFoundError, OSError, ValueError):
+                continue
+            if not is_elf:
+                continue
+            wrapper = destination / executable.name
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                f"exec env LD_LIBRARY_PATH={shlex.quote(library_path)} "
+                f"{shlex.quote(str(executable))} \"$@\"\n"
+            )
+            wrapper.chmod(0o755)
+
+
 def run_stage1_packages(
     architecture: dict[str, str],
     workspace: Path,
@@ -630,6 +676,7 @@ def run_stage1_packages(
             locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
         )
     clean_stage1_build_sysroot(sysroot)
+    refresh_stage1_tool_wrappers(sysroot)
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
@@ -649,6 +696,7 @@ def run_stage1_packages(
         locked_by_name[name] = entry
         stage_stage1_package(entry, recipe_path, sysroot, environment)
         clean_stage1_build_sysroot(sysroot)
+        refresh_stage1_tool_wrappers(sysroot)
         clean_stage1_workdirs(recipe_path.parent)
         locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
