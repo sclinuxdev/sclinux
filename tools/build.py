@@ -510,6 +510,7 @@ def stage1_build_environment(
     if sysroot is not None:
         usr = sysroot / "usr"
         wrappers = sysroot / ".stage1-tool-wrappers"
+        environment["SC_BUILD_SYSROOT"] = str(sysroot.resolve())
         libraries = [str(usr / "lib"), str(sysroot / "lib")]
         includes = [str(usr / "include")]
         prepend_environment(

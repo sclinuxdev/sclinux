@@ -177,6 +177,11 @@ def main() -> int:
         stage1_environment["LDFLAGS"].split()[0],
         "-L/fixture-stage1-sysroot/usr/lib",
     )
+    failed += not check(
+        "Stage1 exposes its isolated sysroot to dependency-aware recipes",
+        stage1_environment["SC_BUILD_SYSROOT"],
+        "/fixture-stage1-sysroot",
+    )
     sage_source = build.source_for_package("sage")
     failed += not check(
         "Stage0 receives the locked Sage source identity",
