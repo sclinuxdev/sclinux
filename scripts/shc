@@ -53,8 +53,6 @@ while [ "$argc" -gt 0 ]; do
                     ch) arg=channel   ;;
                     sv) arg=service   ;;
                     tc) arg=toolchain ;;
-                    # `status` requires sage with antinomie1/sage#2 merged;
-                    # until then this resolves and sage reports it as unknown.
                     st) arg=status    ;;
                 esac
                 ;;

@@ -126,14 +126,11 @@ shc status --full
 > - **别名只在子命令位置生效**：`shc query in` 会原样传给 `sage query in`，绝不会把参数里的 `in` 误伤成 `install`。全局选项写在前面也不影响展开（`shc --root /mnt in foo` → `sage --root /mnt install foo`）。
 > - **非别名 100% 透传**：任何不在上表中的词都原样交给 `sage`，因此 `shc <任意命令>` 与 `sage <任意命令>` 行为完全一致，共享同一套参数体系、同一个 LMDB 状态库（`/var/lib/sage/data.mdb`）与同一个 PubGrub 求解引擎。
 
-> [!NOTE]
-> 上面第 6 条的 `shc status` 依赖上游 Sage 的 `status` 命令，该命令由 [antinomie1/sage#2](https://github.com/antinomie1/sage/pull/2) 引入，**在该 PR 合并前不可用**。其余命令均已在当前上游实现中可用。
-
 ```text
 [OK] Kernel: 6.x.x-shenchen-divine
 [OK] Signal Field: Synchronized (Wolf King Core Active)
 [OK] RootFS: XFS (Status: Healthy / Btrfs Defeated)
-[OK] Package Engine: Sage 0.1.0 (via shc symlink / LMDB Zero-Copy Active)
+[OK] Package Engine: Sage 0.2.0 (via shc wrapper / LMDB Zero-Copy Active)
 [OK] Compositor: wmdx (Vulkan 1.3 Active)
 [OK] Mood: Satisfied with Roasted Fish 🐟
 ```

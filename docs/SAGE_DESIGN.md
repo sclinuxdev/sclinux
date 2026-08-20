@@ -105,21 +105,19 @@ graph TB
 
 ### 归档命名
 
-`sage build` 产出的文件名为 **`{name}-{version}-{release}.pkg.tar.zst`，不含架构后缀**。
+`sage build` 产出的文件名为 **`{name}-{version}-{release}-{arch}.pkg.tar.zst`**。
 
-而 `sage install` 在本地查找包文件时，依次尝试三种形式：
+`sage install` 在本地查找包文件时，依次尝试三种形式：
 
-1. `{name}-{version}-{release}-{arch}.pkg.tar.zst` ← 首选
-2. `{name}-{version}-{release}.pkg.tar.zst`
-3. `{name}-{version}.pkg.tar.zst`
+1. `{name}-{version}-{release}-{arch}.pkg.tar.zst` ← 构建端产出的形式
+2. `{name}-{version}-{release}.pkg.tar.zst` ← 兼容旧版本产出
+3. `{name}-{version}.pkg.tar.zst` ← 同上
 
-**构建端只产出第 2 种，而 `arch` 恰恰是多架构下用来区分同名包的字段。** 索引 `index.toml` 记录 `arch` 却不记录文件名，安装端只能从元数据反推文件名——于是同一个包为两种架构构建会产生同名文件，静默互相覆盖且全程无报错。
-
-> ⚠️ 该缺陷的修复见 [antinomie1/sage#3](https://github.com/antinomie1/sage/pull/3)：构建端改为产出带 `arch` 的名字，并为 `recipe.toml` 增加 `arch` 字段以支持 `arch = "any"`。**合并前上述行为不变。**
+索引 `index.toml` 记录 `arch` 但**不记录文件名**，安装端从元数据反推文件名，因此 `arch` 必须出现在名字里——否则同一个包为两种架构构建会产生同名文件、静默互相覆盖。构建端早期确实遗漏了它（只产出第 2 种形式），已由 [antinomie1/sage#3](https://github.com/antinomie1/sage/pull/3) 修复。
 
 ### 归档内部结构规范：
 ```
-pkgname-1.0.0-1.pkg.tar.zst
+pkgname-1.0.0-1-x86_64.pkg.tar.zst
 ├── .METADATA/
 │   ├── manifest.toml     # 包名、版本、构建号、许可证、Provides、依赖关系
 │   └── service.toml      # 通用守护进程规范定义 (可选)
@@ -169,7 +167,6 @@ description = "..."            # 可选
 license     = "MIT"            # 可选
 channel     = "system"         # 可选，默认 "system"
 arch        = "x86_64"         # 可选，默认 "x86_64"；"any" 表示架构无关
-                               # 需 sage#3 合并后生效
 
 dependencies       = ["so:libc.so.6"]   # 运行时依赖
 build_dependencies = ["rust"]           # 构建期依赖
@@ -397,7 +394,7 @@ sage status
 # 额外列出全部已安装软件包
 sage status --full
 ```
-> ⚠️ 由 [antinomie1/sage#2](https://github.com/antinomie1/sage/pull/2) 引入，**该 PR 合并前不可用**。
+> 由 [antinomie1/sage#2](https://github.com/antinomie1/sage/pull/2) 引入。
 
 #### `sage test-suite`
 ```bash
