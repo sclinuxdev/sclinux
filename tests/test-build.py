@@ -155,7 +155,8 @@ def main() -> int:
         any(seed["index_digest"] in argument for argument in command),
         True,
     )
-    stage1_environment = build.stage1_build_environment(seed)
+    stage1_sysroot = Path("/fixture-stage1-sysroot")
+    stage1_environment = build.stage1_build_environment(seed, stage1_sysroot)
     failed += not check(
         "Stage1 exports the locked source epoch",
         stage1_environment["SOURCE_DATE_EPOCH"],
@@ -165,6 +166,16 @@ def main() -> int:
         "Stage1 fixes the build timezone",
         stage1_environment["TZ"],
         "UTC",
+    )
+    failed += not check(
+        "Stage1 searches its isolated tools before Stage0",
+        stage1_environment["PATH"].split(":")[0],
+        "/fixture-stage1-sysroot/usr/bin",
+    )
+    failed += not check(
+        "Stage1 links against its isolated package libraries",
+        stage1_environment["LDFLAGS"].split()[0],
+        "-L/fixture-stage1-sysroot/usr/lib",
     )
     sage_source = build.source_for_package("sage")
     failed += not check(
@@ -442,7 +453,7 @@ def main() -> int:
         [],
     )
 
-    total = 53
+    total = 55
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

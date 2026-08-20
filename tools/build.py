@@ -485,7 +485,16 @@ def select_stage1_packages(
     return packages[start:stop]
 
 
-def stage1_build_environment(seed: dict | None = None) -> dict[str, str]:
+def prepend_environment(
+    environment: dict[str, str], name: str, values: list[str], separator: str = ":"
+) -> None:
+    current = environment.get(name)
+    environment[name] = separator.join(values + ([current] if current else []))
+
+
+def stage1_build_environment(
+    seed: dict | None = None, sysroot: Path | None = None
+) -> dict[str, str]:
     seed = seed or load_seed_lock()
     environment = os.environ.copy()
     environment.update(
@@ -498,6 +507,36 @@ def stage1_build_environment(seed: dict | None = None) -> dict[str, str]:
             "XMAKE_STATS": "false",
         }
     )
+    if sysroot is not None:
+        usr = sysroot / "usr"
+        libraries = [str(usr / "lib"), str(sysroot / "lib")]
+        includes = [str(usr / "include")]
+        prepend_environment(
+            environment,
+            "PATH",
+            [str(usr / "bin"), str(usr / "sbin"), str(sysroot / "bin"), str(sysroot / "sbin")],
+        )
+        prepend_environment(environment, "LIBRARY_PATH", libraries)
+        prepend_environment(environment, "CPATH", includes)
+        prepend_environment(
+            environment,
+            "PKG_CONFIG_PATH",
+            [str(usr / "lib/pkgconfig"), str(usr / "share/pkgconfig")],
+        )
+        prepend_environment(environment, "ACLOCAL_PATH", [str(usr / "share/aclocal")])
+        prepend_environment(environment, "CMAKE_PREFIX_PATH", [str(usr)])
+        prepend_environment(
+            environment,
+            "CPPFLAGS",
+            [f"-I{usr / 'include'}"],
+            separator=" ",
+        )
+        prepend_environment(
+            environment,
+            "LDFLAGS",
+            [f"-L{usr / 'lib'}", f"-Wl,-rpath-link,{usr / 'lib'}"],
+            separator=" ",
+        )
     return environment
 
 
@@ -525,12 +564,41 @@ def stage1_package_entry(
     }
 
 
+def stage_stage1_package(
+    entry: dict, recipe_path: Path, sysroot: Path, environment: dict[str, str]
+) -> None:
+    stamps = sysroot / ".stage1-build-packages"
+    stamp = stamps / entry["name"]
+    if stamp.is_file() and stamp.read_text().strip() == entry["sha256"]:
+        return
+    artifact = recipe_path.parent / entry["artifact"]
+    sysroot.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "tar",
+            "--zstd",
+            "--extract",
+            "--file",
+            str(artifact),
+            "--directory",
+            str(sysroot),
+            "--strip-components=1",
+            "data",
+        ],
+        check=True,
+        env=environment,
+    )
+    stamps.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(entry["sha256"] + "\n")
+
+
 def run_stage1_packages(
     architecture: dict[str, str],
     workspace: Path,
     first: str | None = None,
     last: str | None = None,
     sage: str = "sage",
+    sysroot: Path | None = None,
 ) -> list[dict]:
     manifest = load_stage1_manifest()
     packages = select_stage1_packages(manifest, first, last)
@@ -544,7 +612,15 @@ def run_stage1_packages(
             if entry is not None:
                 locked_by_name[name] = entry
     built = []
-    environment = stage1_build_environment()
+    sysroot = sysroot or workspace / "build-sysroot"
+    environment = stage1_build_environment(sysroot=sysroot)
+    selected = set(packages)
+    for name in manifest:
+        if name in selected or name not in locked_by_name:
+            continue
+        stage_stage1_package(
+            locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
+        )
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
@@ -562,6 +638,7 @@ def run_stage1_packages(
             raise ConfigError(f"Stage1 package artifact is missing after build: {name}")
         built.append(entry)
         locked_by_name[name] = entry
+        stage_stage1_package(entry, recipe_path, sysroot, environment)
         clean_stage1_workdirs(recipe_path.parent)
         locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
@@ -704,6 +781,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stage1_run.add_argument("--first", help="start at this manifest package")
     stage1_run.add_argument("--last", help="stop after this manifest package")
     stage1_run.add_argument("--sage", default="sage", help="Sage executable inside Stage0")
+    stage1_run.add_argument(
+        "--sysroot", type=Path, help="isolated build dependency sysroot (default: WORKSPACE/build-sysroot)"
+    )
     return parser.parse_args(argv)
 
 
@@ -773,7 +853,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "stage1-run":
         try:
             locked = run_stage1_packages(
-                architecture, args.workspace, args.first, args.last, args.sage
+                architecture, args.workspace, args.first, args.last, args.sage, args.sysroot
             )
         except (ConfigError, OSError) as exc:
             print(f"error: {exc}", file=sys.stderr)
