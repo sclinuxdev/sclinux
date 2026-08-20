@@ -170,6 +170,8 @@ shc status --full
   *官方代码仓库*。Sage 软件包管理器的独立开源实现与最新 C++23 代码（上游以 BSD 2-Clause 协议单独发布）。
 - 🌿 [**shc(Sage) 软件管理系统技术规范文档 (`docs/SAGE_DESIGN.md`)**](docs/SAGE_DESIGN.md)  
   *纯技术文档（无狼王设定）*。包含完整 5 层架构、LMDB 存储表 Schema、`*.pkg.tar.zst` 流式解包、Multi-Init 映射、PubGrub SAT 算法、CLI 完整规范、C++23 模块 DAG 与 5 大工程铁律。
+- 🧭 [**发行版选型与政策 (`docs/DISTRO_POLICY.md`)**](docs/DISTRO_POLICY.md)  
+  *纯技术文档（无狼王设定）*。已拍板的全部技术选型及其**改动代价**、/usr merge 与滚动更新的取舍、配方来源政策、上游源码与二进制仓库的责任划分，以及待定事项清单。
 - 🧱 [**安装规范与磁盘布局设计 (`docs/INSTALLATION.md`)**](docs/INSTALLATION.md)  
   *纯技术文档（无狼王设定）*。XFS on LVM thin 的选型论证、GPT 分区布局、引导器选型（含 GRUB 读不了 thin volume 的约束）、thin pool 元数据防守、快照回滚流程与当前阻塞项清单。
 - 🐾 [**浩宸宇宙：狼王与信号场设定集 (`docs/浩宸宇宙_狼王与信号场设定集.md`)**](docs/浩宸宇宙_狼王与信号场设定集.md)  
