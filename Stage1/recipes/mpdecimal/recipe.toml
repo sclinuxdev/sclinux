@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "mpdecimal"
+version = "4.0.1"
+release = "1"
+description = "Arbitrary precision decimal floating point library (libmpdec)"
+license = "BSD-2-Clause"
+channel = "system"
+
+[source]
+url = "https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "mpdecimal",
+    "so:libmpdec.so.4",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

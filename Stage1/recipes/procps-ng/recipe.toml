@@ -1,0 +1,38 @@
+schema_version = 1
+
+[package]
+name = "procps-ng"
+version = "4.0.7"
+release = "1"
+description = "Process and system monitoring utilities (ps, top, free, pidof, ...)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://downloads.sourceforge.net/project/procps-ng/Production/procps-ng-4.0.7.tar.xz"
+sha256 = ""
+
+dependencies = [
+    "ncurses-libs >= 6.4",
+    "xz-libs >= 5.6.0",
+]
+
+build_dependencies = [
+    "pkgconf",
+]
+
+provides = [
+    "procps-ng",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --docdir=/usr/share/doc/procps-ng-4.0.7 --disable-static --disable-kill --enable-watch8bit",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

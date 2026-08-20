@@ -1,0 +1,37 @@
+schema_version = 1
+
+[package]
+name = "libseccomp"
+version = "2.5.6"
+release = "2"
+description = "Enhanced seccomp library and tools"
+license = "LGPL-2.1-only"
+channel = "system"
+
+[source]
+url = "https://github.com/seccomp/libseccomp/releases/download/v2.5.6/libseccomp-2.5.6.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+    "gperf",
+]
+
+provides = [
+    "libseccomp",
+    "so:libseccomp.so.2",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

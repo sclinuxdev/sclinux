@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "bzip2"
+version = "1.0.8"
+release = "2"
+description = "High-quality data compression program (bzip2/bunzip2/bzcat)"
+license = "bzip2-1.0.6"
+channel = "system"
+
+[source]
+url = "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "bzip2",
+]
+
+prepare = [
+]
+
+build = [
+    "make clean",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make PREFIX=$DESTDIR/usr install",
+    # 拆分：libbz2 库与头文件归 bzip2-libs，此处剔除
+    "rm -f $DESTDIR/usr/lib/libbz2.a $DESTDIR/usr/lib/libbz2.so*",
+    "rm -f $DESTDIR/usr/include/bzlib.h",
+]

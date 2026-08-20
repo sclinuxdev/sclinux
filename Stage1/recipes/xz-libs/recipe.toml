@@ -1,0 +1,33 @@
+schema_version = 1
+
+[package]
+name = "xz-libs"
+version = "5.8.3"
+release = "1"
+description = "liblzma shared library and header"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://tukaani.org/xz/xz-5.8.3.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "xz-libs",
+    "so:liblzma.so.5",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-lzma-links --disable-scripts --disable-doc",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

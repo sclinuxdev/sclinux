@@ -1,0 +1,33 @@
+schema_version = 1
+
+[package]
+name = "linux-headers"
+version = "7.2"
+release = "1"
+description = "Linux kernel UAPI headers for userspace"
+license = "GPL-2.0-only"
+channel = "system"
+
+[source]
+url = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "linux-headers",
+]
+
+prepare = [
+]
+
+build = [
+    "make headers",
+]
+
+install = [
+    "find usr/include -type f ! -name '*.h' -delete",
+    "mkdir -p $DESTDIR/usr/include",
+    "cp -rv usr/include/* $DESTDIR/usr/include/",
+]

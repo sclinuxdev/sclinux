@@ -1,0 +1,47 @@
+schema_version = 1
+
+[package]
+name = "openssl-libs"
+version = "4.0.1"
+release = "1"
+description = "libssl/libcrypto shared libraries"
+license = "Apache-2.0"
+channel = "system"
+
+[source]
+url = "https://www.openssl.org/source/openssl-4.0.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "zlib >= 1.3.0",
+]
+
+build_dependencies = [
+    "perl >= 5.36",
+]
+
+provides = [
+    "openssl-libs",
+    "so:libssl.so.4",
+    "so:libcrypto.so.4",
+    "so:libssl.so.3",
+    "so:libcrypto.so.3",
+]
+
+prepare = [
+]
+
+build = [
+    "./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic no-apps enable-deprecated enable-tls1-method enable-tls1_1-method",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make INSTALL_LIBS= MANSUFFIX=ssl install DESTDIR=$DESTDIR",
+    "ln -sf libssl.so.4 $DESTDIR/usr/lib/libssl.so.3",
+    "ln -sf libcrypto.so.4 $DESTDIR/usr/lib/libcrypto.so.3",
+    # 拆分：仅保留运行库本体（.so.4），头文件/pc/.so 符号链接归 openssl-dev
+    "rm -rf $DESTDIR/usr/include $DESTDIR/usr/lib/pkgconfig",
+    "rm -f $DESTDIR/usr/lib/libssl.so $DESTDIR/usr/lib/libcrypto.so",
+    "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/share $DESTDIR/etc",
+]

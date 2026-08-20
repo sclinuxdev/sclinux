@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "zlib-dev"
+version = "1.3.2"
+release = "1"
+description = "Standard compression library (headers, static lib, dev symlink)"
+license = "Zlib"
+channel = "system"
+
+[source]
+url = "https://zlib.net/zlib-1.3.2.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "zlib >= 1.3.2",
+]
+
+provides = [
+    "zlib-dev",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    # 拆分：仅保留头文件/静态库/libz.so 符号链接/pc，剔除运行库本体
+    "rm -f $DESTDIR/usr/lib/libz.so.1* $DESTDIR/usr/lib/libz.so.1.3.2",
+    "rm -rf $DESTDIR/usr/share/man",
+]

@@ -1,0 +1,50 @@
+schema_version = 1
+
+[package]
+name = "mkinitcpio"
+version = "41.1"
+release = "1"
+description = "Modular initramfs image creation utility"
+license = "GPL-2.0-only"
+channel = "system"
+
+[source]
+url = "https://sources.archlinux.org/other/mkinitcpio/mkinitcpio-41.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "bash >= 5.2",
+    "kmod >= 34.0",
+    "coreutils >= 9.0",
+    "util-linux >= 2.40",
+    "findutils >= 4.9",
+    "grep >= 3.10",
+    "gawk >= 5.3",
+    "sed >= 4.9",
+    "zstd >= 1.5.0",
+    "libarchive >= 3.7.0",
+    "systemd >= 256.0",
+]
+
+build_dependencies = [
+    "meson >= 1.0.0",
+    "ninja >= 1.11.0",
+    "pkgconf >= 2.0.0",
+]
+
+provides = [
+    "mkinitcpio",
+    "virtual/initramfs-generator",
+]
+
+prepare = [
+]
+
+build = [
+    "meson setup build --prefix=/usr --sysconfdir=/etc -Ddocs=false",
+    "ninja -C build",
+]
+
+install = [
+    "DESTDIR=$DESTDIR ninja -C build install",
+]

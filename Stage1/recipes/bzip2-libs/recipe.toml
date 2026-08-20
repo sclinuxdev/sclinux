@@ -1,0 +1,40 @@
+schema_version = 1
+
+[package]
+name = "bzip2-libs"
+version = "1.0.8"
+release = "1"
+description = "libbz2 shared library and header"
+license = "bzip2-1.0.6"
+channel = "system"
+
+[source]
+url = "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "bzip2-libs",
+    "so:libbz2.so.1",
+    "so:libbz2.so.1.0",
+]
+
+prepare = [
+]
+
+build = [
+    "make clean",
+    "make -f Makefile-libbz2_so",
+    "make -j$(nproc)",
+]
+
+install = [
+    "mkdir -p $DESTDIR/usr/lib $DESTDIR/usr/include",
+    "cp -av libbz2.so.1.0.8 $DESTDIR/usr/lib/",
+    "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so.1",
+    "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so",
+    "cp -av libbz2.a $DESTDIR/usr/lib/",
+    "cp -av bzlib.h $DESTDIR/usr/include/",
+]

@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "binutils"
+version = "2.47"
+release = "2"
+description = "GNU binary utilities (ld, as, ar, nm, objcopy, strip, etc.)"
+license = "GPL-3.0-or-later"
+channel = "toolchain/gcc:15"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/binutils/binutils-2.47.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "binutils",
+    "so:libbfd-2.47.so",
+    "so:libctf.so.0",
+]
+
+prepare = [
+    "mkdir -p build",
+]
+
+build = [
+    "cd build && ../configure --prefix=/opt/channels/gcc/15 --sysconfdir=/etc --enable-gold --enable-ld=default --enable-plugins --enable-shared --disable-werror --enable-64-bit-bfd --with-system-zlib --enable-default-hash-style=gnu --without-debuginfod --disable-gprofng",
+    "cd build && make tooldir=/opt/channels/gcc/15 -j$(nproc)",
+]
+
+install = [
+    "cd build && make tooldir=/opt/channels/gcc/15 install DESTDIR=$DESTDIR",
+    "rm -fv $DESTDIR/opt/channels/gcc/15/lib/lib{bfd,ctf,ctf-nobfd,gprofng,opcodes,sframe}.a 2>/dev/null || true",
+]

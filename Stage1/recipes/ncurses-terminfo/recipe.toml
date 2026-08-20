@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "ncurses-terminfo"
+version = "6.6"
+release = "1"
+description = "Terminal terminfo database (/usr/share/terminfo)"
+license = "MIT"
+channel = "system"
+
+[source]
+url = "https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "ncurses-terminfo",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --mandir=/usr/share/man --with-shared --without-debug --without-ada --enable-widec",
+    "make -j$(nproc)",
+]
+
+install = [
+    # terminfo 数据库由 make install 阶段用 tic 编译生成，必须完整构建
+    "make install DESTDIR=$DESTDIR",
+    # 拆分：仅保留 /usr/share/terminfo，其余全部剔除
+    "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/lib $DESTDIR/usr/include $DESTDIR/usr/share/man $DESTDIR/usr/share/tabset $DESTDIR/usr/share/doc $DESTDIR/usr/share/pkgconfig $DESTDIR/usr/share/terminfo.db",
+]

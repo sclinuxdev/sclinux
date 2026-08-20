@@ -1,0 +1,37 @@
+schema_version = 1
+
+[package]
+name = "pkgconf"
+version = "3.0.5"
+release = "1"
+description = "Package compiler/linker configuration tool (pkg-config compatible)"
+license = "ISC"
+channel = "system"
+
+[source]
+url = "https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.5/pkgconf-3.0.5.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "pkgconf",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    "ln -sf pkgconf $DESTDIR/usr/bin/pkg-config",
+    "ln -sf pkgconf.1 $DESTDIR/usr/share/man/man1/pkg-config.1 2>/dev/null || true",
+]

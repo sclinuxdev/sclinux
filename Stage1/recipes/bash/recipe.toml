@@ -1,0 +1,40 @@
+schema_version = 1
+
+[package]
+name = "bash"
+version = "5.3"
+release = "2"
+description = "The GNU Bourne Again SHell"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/bash/bash-5.3.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "readline >= 8.2.0",
+    "ncurses >= 6.5",
+]
+
+build_dependencies = [
+    "gettext >= 0.22",
+]
+
+provides = [
+    "bash",
+    "sh",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --without-bash-malloc --with-installed-readline",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    "ln -sf bash $DESTDIR/usr/bin/sh",
+]

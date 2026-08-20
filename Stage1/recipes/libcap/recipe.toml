@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "libcap"
+version = "2.78"
+release = "1"
+description = "POSIX 1003.1e capabilities library"
+license = "BSD-3-Clause"
+channel = "system"
+
+[source]
+url = "https://cdn.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.78.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "libcap",
+    "so:libcap.so.2",
+    "so:libpsx.so.2",
+]
+
+prepare = [
+    "sed -i '/install -m 0644 doc/d' Makefile",
+    "sed -i '/install -m.*STA/d' libcap/Makefile",
+]
+
+build = [
+    "make prefix=/usr lib=lib PAM_CAP=no GOLANG=no -j$(nproc)",
+]
+
+install = [
+    "make prefix=/usr lib=lib PAM_CAP=no GOLANG=no install DESTDIR=$DESTDIR",
+]

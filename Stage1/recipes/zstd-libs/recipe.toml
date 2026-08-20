@@ -1,0 +1,32 @@
+schema_version = 1
+
+[package]
+name = "zstd-libs"
+version = "1.5.7"
+release = "1"
+description = "libzstd shared library and header"
+license = "BSD-3-Clause OR GPL-2.0-only"
+channel = "system"
+
+[source]
+url = "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "zstd-libs",
+    "so:libzstd.so.1",
+]
+
+prepare = [
+]
+
+build = [
+    "make -C lib prefix=/usr -j$(nproc)",
+]
+
+install = [
+    "make -C lib prefix=/usr install DESTDIR=$DESTDIR",
+]

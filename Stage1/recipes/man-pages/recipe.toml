@@ -1,0 +1,33 @@
+schema_version = 1
+
+[package]
+name = "man-pages"
+version = "6.18"
+release = "1"
+description = "Linux man pages (documentation data)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.edge.kernel.org/pub/linux/docs/man-pages/man-pages-6.18.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "man-pages",
+]
+
+prepare = [
+]
+
+build = [
+]
+
+install = [
+    "make -R -j1 prefix=/usr install DESTDIR=$DESTDIR",
+]

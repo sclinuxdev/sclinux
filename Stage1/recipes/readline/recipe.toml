@@ -1,0 +1,34 @@
+schema_version = 1
+
+[package]
+name = "readline"
+version = "8.3"
+release = "2"
+description = "GNU Readline library for command-line editing"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/readline/readline-8.3.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "ncurses >= 6.5",
+]
+
+provides = [
+    "readline",
+    "so:libreadline.so.8",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static --with-curses",
+    "make -j$(nproc) SHLIB_LIBS=\"-lncursesw\"",
+]
+
+install = [
+    "make SHLIB_LIBS=\"-lncursesw\" install DESTDIR=$DESTDIR",
+]

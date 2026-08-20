@@ -1,0 +1,126 @@
+schema_version = 1
+
+[package]
+name = "base"
+version = "2.0.0"
+release = "1"
+description = "sclinux Base System Meta-Package (Stage 1)"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+dependencies = [
+    "os-release",
+    "base-files",
+    "linux-headers",
+    "glibc",
+    "zlib",
+    "zlib-dev",
+    "bzip2",
+    "bzip2-libs",
+    "xz",
+    "xz-libs",
+    "zstd",
+    "zstd-libs",
+    "lz4",
+    "lz4-libs",
+    "file",
+    "file-libs",
+    "m4",
+    "ncurses",
+    "ncurses-libs",
+    "ncurses-terminfo",
+    "readline",
+    "sed",
+    "pcre2",
+    "pcre2-libs",
+    "grep",
+    "gawk",
+    "diffutils",
+    "findutils",
+    "tar",
+    "gzip",
+    "patch",
+    "make",
+    "bash",
+    "attr",
+    "acl",
+    "libcap",
+    "libseccomp",
+    "coreutils",
+    "gmp",
+    "mpfr",
+    "mpc",
+    "binutils",
+    "gcc",
+    "gcc-libs",
+    "xmake",
+    "lmdb",
+    "openssl",
+    "openssl-libs",
+    "openssl-dev",
+    "curl",
+    "tomlplusplus",
+    "sage",
+    "util-linux",
+    "util-linux-libs",
+    "e2fsprogs",
+    "e2fsprogs-libs",
+    "man-pages",
+    "iana-etc",
+    "pkgconf",
+    "bc",
+    "flex",
+    "bison",
+    "texinfo",
+    "libtool",
+    "autoconf",
+    "automake",
+    "gdbm",
+    "gperf",
+    "gettext",
+    "tcl",
+    "expect",
+    "dejagnu",
+    "perl",
+    "libffi",
+    "sqlite",
+    "mpdecimal",
+    "python",
+    "flit-core",
+    "packaging",
+    "wheel",
+    "setuptools",
+    "meson",
+    "ninja",
+    "expat",
+    "libpipeline",
+    "libelf",
+    "libxcrypt",
+    "groff",
+    "markupsafe",
+    "jinja2",
+    "psmisc",
+    "inetutils",
+    "less",
+    "iproute2",
+    "kbd",
+    "procps-ng",
+    "shadow",
+    "kmod",
+    "systemd",
+    "dbus",
+    "man-db",
+]
+
+provides = [
+    "base",
+]
+
+prepare = [
+]
+
+build = [
+]
+
+install = [
+]

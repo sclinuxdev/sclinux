@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "findutils"
+version = "4.11.0"
+release = "2"
+description = "GNU utilities for finding files (find, xargs)"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/findutils/findutils-4.11.0.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+    "gettext >= 0.22",
+]
+
+provides = [
+    "findutils",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --localstatedir=/var/lib/locate",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

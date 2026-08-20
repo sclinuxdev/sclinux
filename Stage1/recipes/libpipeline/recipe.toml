@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "libpipeline"
+version = "1.5.8"
+release = "1"
+description = "Pipeline manipulation library (used by man-db)"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://deb.debian.org/debian/pool/main/libp/libpipeline/libpipeline_1.5.8.orig.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "libpipeline",
+    "so:libpipeline.so.1",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

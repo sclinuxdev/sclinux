@@ -1,0 +1,33 @@
+schema_version = 1
+
+[package]
+name = "gmp"
+version = "6.3.0"
+release = "2"
+description = "GNU Multiple Precision Arithmetic Library"
+license = "LGPL-3.0-or-later OR GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "gmp",
+    "so:libgmp.so.10",
+]
+
+prepare = [
+]
+
+build = [
+    "CFLAGS=\"${CFLAGS:--O2} -std=gnu17\" ./configure --prefix=/usr --enable-cxx --disable-static --build=x86_64-pc-linux-gnu",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

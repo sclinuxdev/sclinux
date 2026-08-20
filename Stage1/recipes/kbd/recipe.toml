@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "kbd"
+version = "2.10.0"
+release = "1"
+description = "Keyboard and console utilities (loadkeys, setfont, ...)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.edge.kernel.org/pub/linux/utils/kbd/kbd-2.10.0.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "kbd",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-vlock",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    "rm -rf $DESTDIR/usr/share/doc/kbd/examples 2>/dev/null || true",
+]

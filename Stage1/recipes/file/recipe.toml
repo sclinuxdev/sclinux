@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "file"
+version = "5.48"
+release = "1"
+description = "File type identification utility"
+license = "BSD-2-Clause"
+channel = "system"
+
+[source]
+url = "https://astron.com/pub/file/file-5.48.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "file-libs >= 5.48",
+]
+
+provides = [
+    "file",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    # 拆分：libmagic 与头文件/pc 归 file-libs；magic 数据库留在本包（file 工具运行需要）
+    "rm -rf $DESTDIR/usr/lib/libmagic* $DESTDIR/usr/include/magic.h $DESTDIR/usr/lib/pkgconfig/libmagic.pc",
+]

@@ -1,0 +1,39 @@
+schema_version = 1
+
+[package]
+name = "e2fsprogs-libs"
+version = "1.47.4"
+release = "1"
+description = "libext2fs/libcom_err/libss/libsupport shared libraries and headers"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+    "pkgconf",
+]
+
+provides = [
+    "e2fsprogs-libs",
+    "so:libext2fs.so.2",
+    "so:libcom_err.so.2",
+    "so:libss.so.2",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --sysconfdir=/etc --enable-elf-shlibs --disable-libblkid --disable-libuuid --disable-uuidd --disable-fsck",
+    "make -j$(nproc) libs",
+]
+
+install = [
+    "make install-libs DESTDIR=$DESTDIR",
+]

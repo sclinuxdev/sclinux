@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "lmdb"
+version = "0.9.33"
+release = "2"
+description = "Symas Lightning Memory-Mapped Database (LMDB)"
+license = "OpenLDAP"
+channel = "system"
+
+[source]
+url = "https://github.com/LMDB/lmdb/archive/refs/tags/LMDB_0.9.33.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "lmdb",
+    "so:liblmdb.so.0",
+    "so:liblmdb.so",
+]
+
+prepare = [
+]
+
+build = [
+    "cd libraries/liblmdb && make -j$(nproc)",
+]
+
+install = [
+    "mkdir -p $DESTDIR/usr/bin $DESTDIR/usr/lib $DESTDIR/usr/include $DESTDIR/usr/share/man/man1",
+    "cd libraries/liblmdb && make prefix=/usr install DESTDIR=$DESTDIR",
+    "ln -sf liblmdb.so $DESTDIR/usr/lib/liblmdb.so.0",
+]

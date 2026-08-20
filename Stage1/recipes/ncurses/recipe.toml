@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "ncurses"
+version = "6.6"
+release = "2"
+description = "Terminal screen handling programs (clear, reset, tic, infocmp, tput, toe, tabs)"
+license = "MIT"
+channel = "system"
+
+[source]
+url = "https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "ncurses-libs >= 6.6",
+    "ncurses-terminfo >= 6.6",
+]
+
+provides = [
+    "ncurses",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --mandir=/usr/share/man --with-shared --without-debug --without-ada --enable-widec --enable-pc-files --with-pkg-config-libdir=/usr/lib/pkgconfig",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    # 拆分：库/头文件归 ncurses-libs，terminfo 数据归 ncurses-terminfo，仅保留程序与 man
+    "rm -rf $DESTDIR/usr/lib $DESTDIR/usr/include $DESTDIR/usr/share/terminfo",
+]

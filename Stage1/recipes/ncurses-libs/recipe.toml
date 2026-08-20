@@ -1,0 +1,47 @@
+schema_version = 1
+
+[package]
+name = "ncurses-libs"
+version = "6.6"
+release = "1"
+description = "libncursesw/libncurses/libform/libmenu/libpanel shared libraries and headers"
+license = "MIT"
+channel = "system"
+
+[source]
+url = "https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+provides = [
+    "ncurses-libs",
+    "so:libncursesw.so.6",
+    "so:libncurses.so.6",
+    "so:libtinfo.so.6",
+    "so:libtinfow.so.6",
+    "so:libformw.so.6",
+    "so:libmenuw.so.6",
+    "so:libpanelw.so.6",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --mandir=/usr/share/man --with-shared --without-debug --without-ada --enable-widec --enable-pc-files --with-pkg-config-libdir=/usr/lib/pkgconfig --without-progs --without-tests --without-manpages",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+    "for lib in ncurses form panel menu ; do echo \"INPUT(-l${lib}w)\" > $DESTDIR/usr/lib/lib${lib}.so; ln -sf ${lib}w.pc $DESTDIR/usr/lib/pkgconfig/${lib}.pc 2>/dev/null || true; done",
+    "echo \"INPUT(-lncursesw)\" > $DESTDIR/usr/lib/libcursesw.so",
+    "echo \"INPUT(-lncursesw)\" > $DESTDIR/usr/lib/libtinfo.so",
+    "echo \"INPUT(-lncursesw)\" > $DESTDIR/usr/lib/libtinfow.so",
+    "ln -sf libncurses.so $DESTDIR/usr/lib/libcurses.so 2>/dev/null || true",
+    "ln -sf libncursesw.so.6 $DESTDIR/usr/lib/libncurses.so.6 2>/dev/null || true",
+    "ln -sf libncursesw.so.6 $DESTDIR/usr/lib/libtinfo.so.6 2>/dev/null || true",
+    "ln -sf libncursesw.so.6 $DESTDIR/usr/lib/libtinfow.so.6 2>/dev/null || true",
+]

@@ -1,0 +1,39 @@
+schema_version = 1
+
+[package]
+name = "tcl"
+version = "8.6.18"
+release = "1"
+description = "Tool Command Language interpreter"
+license = "TCL"
+channel = "system"
+
+[source]
+url = "https://downloads.sourceforge.net/project/tcl/Tcl/8.6.18/tcl8.6.18-src.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "tcl",
+    "so:libtcl8.6.so",
+]
+
+prepare = [
+]
+
+build = [
+    "cd unix && ./configure --prefix=/usr --mandir=/usr/share/man",
+    "cd unix && make -j$(nproc)",
+]
+
+install = [
+    "cd unix && make install DESTDIR=$DESTDIR",
+    "cd unix && make install-private-headers DESTDIR=$DESTDIR",
+    "ln -sfv tclsh8.6 $DESTDIR/usr/bin/tclsh",
+    "ln -sfv libtcl8.6.so $DESTDIR/usr/lib/libtcl.so",
+]

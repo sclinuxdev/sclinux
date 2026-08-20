@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "sed"
+version = "4.10"
+release = "2"
+description = "GNU stream editor"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/sed/sed-4.10.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+    "gettext >= 0.22",
+]
+
+provides = [
+    "sed",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

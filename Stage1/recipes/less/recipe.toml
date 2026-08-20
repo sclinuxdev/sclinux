@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "less"
+version = "704"
+release = "1"
+description = "Terminal pager (less)"
+license = "GPL-3.0-or-later OR BSD-2-Clause"
+channel = "system"
+
+[source]
+url = "https://ftpmirror.gnu.org/less/less-704.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "less",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --sysconfdir=/etc",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

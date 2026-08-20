@@ -1,0 +1,40 @@
+schema_version = 1
+
+[package]
+name = "openssl-dev"
+version = "4.0.1"
+release = "1"
+description = "OpenSSL headers, pkg-config files and unversioned .so symlinks"
+license = "Apache-2.0"
+channel = "system"
+
+[source]
+url = "https://www.openssl.org/source/openssl-4.0.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "openssl-libs >= 4.0.1",
+]
+
+build_dependencies = [
+    "perl >= 5.36",
+]
+
+provides = [
+    "openssl-dev",
+]
+
+prepare = [
+]
+
+build = [
+    "./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic enable-deprecated enable-tls1-method enable-tls1_1-method",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make INSTALL_LIBS= MANSUFFIX=ssl install DESTDIR=$DESTDIR",
+    # 拆分：仅保留头文件、pc、.so 符号链接（构建期 -lssl/-lcrypto 需要）
+    "rm -f $DESTDIR/usr/lib/libssl.so.4 $DESTDIR/usr/lib/libcrypto.so.4",
+    "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/share $DESTDIR/etc $DESTDIR/usr/lib/engines-* $DESTDIR/usr/lib/ossl-modules",
+]

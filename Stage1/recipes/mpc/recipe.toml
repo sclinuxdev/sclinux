@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "mpc"
+version = "1.4.1"
+release = "2"
+description = "Multiple-precision complex arithmetic library"
+license = "LGPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/mpc/mpc-1.4.1.tar.xz"
+sha256 = ""
+
+dependencies = [
+    "gmp >= 6.3.0",
+    "mpfr >= 4.2.0",
+]
+
+provides = [
+    "mpc",
+    "so:libmpc.so.3",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

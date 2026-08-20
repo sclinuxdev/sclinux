@@ -1,0 +1,42 @@
+schema_version = 1
+
+[package]
+name = "dbus"
+version = "1.16.2"
+release = "1"
+description = "D-Bus message bus system (daemon and libdbus)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz"
+sha256 = ""
+
+dependencies = [
+    "expat >= 2.6.0",
+    "systemd >= 261.0",
+]
+
+build_dependencies = [
+    "meson >= 1.5",
+    "ninja >= 1.11",
+]
+
+provides = [
+    "dbus",
+    "so:libdbus-1.so.3",
+]
+
+prepare = [
+]
+
+build = [
+    "mkdir build",
+    "cd build && meson setup --prefix=/usr --buildtype=release --wrap-mode=nofallback ..",
+    "cd build && ninja -j$(nproc)",
+]
+
+install = [
+    "cd build && DESTDIR=$DESTDIR ninja install",
+    "ln -sfv /etc/machine-id $DESTDIR/var/lib/dbus",
+]

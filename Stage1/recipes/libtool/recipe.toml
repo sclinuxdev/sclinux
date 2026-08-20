@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "libtool"
+version = "2.6.2"
+release = "1"
+description = "GNU generic library support script"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/libtool/libtool-2.6.2.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "libtool",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

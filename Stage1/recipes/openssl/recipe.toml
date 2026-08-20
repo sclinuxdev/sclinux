@@ -1,0 +1,42 @@
+schema_version = 1
+
+[package]
+name = "openssl"
+version = "4.0.1"
+release = "1"
+description = "TLS/SSL command-line tools and configuration (openssl CLI, /etc/ssl)"
+license = "Apache-2.0"
+channel = "system"
+
+[source]
+url = "https://www.openssl.org/source/openssl-4.0.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "openssl-libs >= 4.0.1",
+    "zlib >= 1.3.0",
+]
+
+build_dependencies = [
+    "perl >= 5.36",
+]
+
+provides = [
+    "openssl",
+]
+
+prepare = [
+]
+
+build = [
+    "./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make INSTALL_LIBS= MANSUFFIX=ssl install DESTDIR=$DESTDIR",
+    # 拆分：运行库归 openssl-libs，头文件/pc/符号链接归 openssl-dev
+    "rm -rf $DESTDIR/usr/include",
+    "rm -f $DESTDIR/usr/lib/libssl.so* $DESTDIR/usr/lib/libcrypto.so*",
+    "rm -rf $DESTDIR/usr/lib/pkgconfig",
+]

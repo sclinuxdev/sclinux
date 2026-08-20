@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "psmisc"
+version = "23.7"
+release = "1"
+description = "Process management utilities (fuser, killall, pstree, peekfd)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://downloads.sourceforge.net/project/psmisc/psmisc/psmisc-23.7.tar.xz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "psmisc",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

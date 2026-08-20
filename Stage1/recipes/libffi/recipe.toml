@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "libffi"
+version = "3.8.0"
+release = "1"
+description = "Portable Foreign Function Interface library"
+license = "MIT"
+channel = "system"
+
+[source]
+url = "https://github.com/libffi/libffi/releases/download/v3.8.0/libffi-3.8.0.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "libffi",
+    "so:libffi.so.8",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static --with-gcc-arch=native",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

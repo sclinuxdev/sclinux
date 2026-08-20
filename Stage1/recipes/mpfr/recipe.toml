@@ -1,0 +1,34 @@
+schema_version = 1
+
+[package]
+name = "mpfr"
+version = "4.2.2"
+release = "2"
+description = "Multiple-precision floating-point library"
+license = "LGPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://mirrors.kernel.org/gnu/mpfr/mpfr-4.2.2.tar.xz"
+sha256 = ""
+
+dependencies = [
+    "gmp >= 6.3.0",
+]
+
+provides = [
+    "mpfr",
+    "so:libmpfr.so.6",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static --enable-thread-safe",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

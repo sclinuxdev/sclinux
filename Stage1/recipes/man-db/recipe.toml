@@ -1,0 +1,38 @@
+schema_version = 1
+
+[package]
+name = "man-db"
+version = "2.13.1"
+release = "1"
+description = "Manual page browsing utilities (man, mandb)"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://download.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz"
+sha256 = ""
+
+dependencies = [
+    "libpipeline >= 1.5.0",
+    "gdbm >= 1.23",
+    "groff >= 1.23.0",
+    "less >= 590",
+    "xz-libs >= 5.6.0",
+]
+
+provides = [
+    "man-db",
+]
+
+prepare = [
+    "sed -i '/SUBDIRS/s/manual//' Makefile.in",
+]
+
+build = [
+    "./configure --prefix=/usr --docdir=/usr/share/doc/man-db-2.13.1 --sysconfdir=/etc --disable-setuid --enable-cache-owner=bin --with-browser=/usr/bin/lynx --with-vgrind=/usr/bin/vgrind --with-grap=/usr/bin/grap --disable-manual",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

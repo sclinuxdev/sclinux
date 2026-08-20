@@ -1,0 +1,35 @@
+schema_version = 1
+
+[package]
+name = "groff"
+version = "1.24.1"
+release = "1"
+description = "GNU troff text formatting system (man page rendering)"
+license = "GPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://ftpmirror.gnu.org/groff/groff-1.24.1.tar.gz"
+sha256 = ""
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "groff",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

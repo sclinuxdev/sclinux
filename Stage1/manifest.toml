@@ -1,0 +1,536 @@
+# Sage Linux Stage 1 构建清单（全量重建，不继承）
+# - 顺序 = 依赖拓扑排序（recipe 的 dependencies + build_dependencies 自动生成，
+#   重放：python3 stage1/scripts/gen-order.py --write）；batch 字段仅为设计分组标记。
+# - 所有 102 个包 action = "build"：stage1 在 stage0 chroot（/mnt）内全量重建。
+# - 默认只构建不安装（STAGE1_INSTALL=1 时逐包安装进构建 chroot 供后续构建依赖）。
+schema_version = 1
+stage = 1
+
+[[packages]]
+name = "os-release"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "base-files"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "linux-headers"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "zlib"
+batch = "R0"
+action = "build"
+note = "拆分：zlib-dev"
+
+[[packages]]
+name = "zlib-dev"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "bzip2"
+batch = "R0"
+action = "build"
+note = "拆分：bzip2-libs"
+
+[[packages]]
+name = "bzip2-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "xz-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "xz"
+batch = "R0"
+action = "build"
+note = "拆分：xz-libs"
+
+[[packages]]
+name = "zstd-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "zstd"
+batch = "R0"
+action = "build"
+note = "拆分：zstd-libs"
+
+[[packages]]
+name = "lz4-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "lz4"
+batch = "R0"
+action = "build"
+note = "拆分：lz4-libs"
+
+[[packages]]
+name = "file-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "file"
+batch = "R0"
+action = "build"
+note = "拆分：file-libs"
+
+[[packages]]
+name = "m4"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "ncurses-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "ncurses-terminfo"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "ncurses"
+batch = "R0"
+action = "build"
+note = "拆分：ncurses-libs + ncurses-terminfo"
+
+[[packages]]
+name = "readline"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "pcre2-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "pcre2"
+batch = "R0"
+action = "build"
+note = "拆分：pcre2-libs"
+
+[[packages]]
+name = "patch"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "attr"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "acl"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "libcap"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gmp"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "mpfr"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "mpc"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "binutils"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gcc"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "xmake"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "lmdb"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "tomlplusplus"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "util-linux-libs"
+batch = "R"
+action = "build"
+
+[[packages]]
+name = "util-linux"
+batch = "R"
+action = "build"
+note = "拆分：util-linux-libs（systemd 依赖 libmount）"
+
+[[packages]]
+name = "man-pages"
+batch = "A"
+action = "build"
+
+[[packages]]
+name = "iana-etc"
+batch = "A"
+action = "build"
+
+[[packages]]
+name = "pkgconf"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "e2fsprogs-libs"
+batch = "R"
+action = "build"
+
+[[packages]]
+name = "e2fsprogs"
+batch = "R"
+action = "build"
+note = "拆分：e2fsprogs-libs"
+
+[[packages]]
+name = "bc"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "flex"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "bison"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "libtool"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "gdbm"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "gperf"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "libseccomp"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gettext"
+batch = "B"
+action = "build"
+note = "提前：coreutils/bash/make 等重建需要 msgfmt"
+
+[[packages]]
+name = "sed"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "grep"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gawk"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "diffutils"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "findutils"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "tar"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gzip"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "make"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "bash"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "coreutils"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "tcl"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "expect"
+batch = "C"
+action = "build"
+note = "需 tcl"
+
+[[packages]]
+name = "dejagnu"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "perl"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "texinfo"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "autoconf"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "automake"
+batch = "B"
+action = "build"
+
+[[packages]]
+name = "openssl-libs"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "openssl"
+batch = "R0"
+action = "build"
+note = "拆分：openssl-libs + openssl-dev"
+
+[[packages]]
+name = "openssl-dev"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "curl"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "libffi"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "sqlite"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "mpdecimal"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "expat"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "python"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "glibc"
+batch = "R0"
+action = "build"
+
+[[packages]]
+name = "gcc-libs"
+batch = "R0"
+action = "build"
+note = "从 gcc 工件提取运行库"
+
+[[packages]]
+name = "sage"
+batch = "R0"
+action = "build"
+note = "在 chroot 内用 /distro 源码重建"
+
+[[packages]]
+name = "flit-core"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "packaging"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "wheel"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "setuptools"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "ninja"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "meson"
+batch = "C"
+action = "build"
+
+[[packages]]
+name = "libpipeline"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "libelf"
+batch = "D"
+action = "build"
+note = "elfutils 只取 libelf"
+
+[[packages]]
+name = "libxcrypt"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "groff"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "markupsafe"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "jinja2"
+batch = "D"
+action = "build"
+
+[[packages]]
+name = "psmisc"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "inetutils"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "less"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "iproute2"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "kbd"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "procps-ng"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "shadow"
+batch = "E"
+action = "build"
+note = "需 libxcrypt"
+
+[[packages]]
+name = "kmod"
+batch = "E"
+action = "build"
+
+[[packages]]
+name = "systemd"
+batch = "F"
+action = "build"
+note = "提供 virtual/init + virtual/udev；须在 dbus 之前"
+
+[[packages]]
+name = "dbus"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "man-db"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "base"
+batch = "F"
+action = "build"
+note = "2.0.0 元包，依赖全部 101 包"
