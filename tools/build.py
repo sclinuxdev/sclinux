@@ -355,6 +355,13 @@ def collect_stage1_sources(manifest: Path = DEFAULT_MANIFEST) -> list[dict]:
     return [by_url[url] for url in sorted(by_url)]
 
 
+def source_for_package(package: str, manifest: Path = DEFAULT_MANIFEST) -> dict:
+    for source in collect_stage1_sources(manifest):
+        if package in source["packages"]:
+            return source
+    raise ConfigError(f"Stage1 package has no locked source: {package}")
+
+
 def parse_url_rewrites(values: list[str]) -> list[tuple[str, str]]:
     rewrites = []
     for value in values:
@@ -439,6 +446,7 @@ def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str
 
     image = f"{seed['image']}@{seed['index_digest']}"
     packages = " ".join(seed["packages"])
+    sage = source_for_package("sage")
     return [
         "docker",
         "buildx",
@@ -465,6 +473,10 @@ def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str
         f"SOURCE_DATE_EPOCH={seed['source_date_epoch']}",
         "--build-arg",
         f"APT_PACKAGES={packages}",
+        "--build-arg",
+        f"SAGE_URL={sage['url']}",
+        "--build-arg",
+        f"SAGE_SHA256={sage['sha256']}",
         str(REPO / "Stage0"),
     ]
 
@@ -503,6 +515,7 @@ def write_stage0_metadata(
         "seed_index_digest": seed["index_digest"],
         "seed_manifest_digest": seed["manifests"][name],
         "snapshot": seed["snapshot"],
+        "bootstrap_sage": source_for_package("sage"),
         "packages": packages,
     }
     output = REPO / "out" / name / "stage0.json"

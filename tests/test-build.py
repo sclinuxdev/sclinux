@@ -112,12 +112,17 @@ def main() -> int:
     failed += not check("Stage0 never copies the repository into its seed", forbidden, [])
     failed += not check(
         "Stage0 allows xmake inside the root-owned build container",
-        "ENV XMAKE_ROOT=y" in containerfile,
+        "XMAKE_ROOT=y" in containerfile,
         True,
     )
     failed += not check(
         "Stage0 disables xmake network statistics",
-        "ENV XMAKE_STATS=false" in containerfile,
+        "XMAKE_STATS=false" in containerfile,
+        True,
+    )
+    failed += not check(
+        "Stage0 verifies the Sage source before building it",
+        "sha256sum --check --strict" in containerfile,
         True,
     )
 
@@ -136,6 +141,15 @@ def main() -> int:
     failed += not check(
         "Stage0 pins the OCI index digest",
         any(seed["index_digest"] in argument for argument in command),
+        True,
+    )
+    sage_source = build.source_for_package("sage")
+    failed += not check(
+        "Stage0 receives the locked Sage source identity",
+        {
+            f"SAGE_URL={sage_source['url']}",
+            f"SAGE_SHA256={sage_source['sha256']}",
+        }.issubset(command),
         True,
     )
 
@@ -321,7 +335,7 @@ def main() -> int:
         [],
     )
 
-    total = 40
+    total = 42
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

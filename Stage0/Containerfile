@@ -6,11 +6,15 @@ ARG APT_PACKAGES
 ARG DEBIAN_SNAPSHOT
 ARG DEBIAN_SUITE
 ARG SOURCE_DATE_EPOCH
+ARG SAGE_URL
+ARG SAGE_SHA256
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
-    TZ=UTC
+    TZ=UTC \
+    XMAKE_ROOT=y \
+    XMAKE_STATS=false
 
 RUN set -eu; \
     test -n "${APT_PACKAGES}"; \
@@ -39,7 +43,18 @@ RUN set -eu; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-ENV XMAKE_ROOT=y
-ENV XMAKE_STATS=false
+RUN set -eu; \
+    test -n "${SAGE_URL}"; \
+    test -n "${SAGE_SHA256}"; \
+    curl --fail --location --retry 4 --output /tmp/sage.tar.gz "${SAGE_URL}"; \
+    printf '%s  %s\n' "${SAGE_SHA256}" /tmp/sage.tar.gz | sha256sum --check --strict; \
+    mkdir /tmp/sage-src; \
+    tar -xzf /tmp/sage.tar.gz --strip-components=1 -C /tmp/sage-src; \
+    cd /tmp/sage-src; \
+    xmake f -c -m release -y; \
+    xmake -y; \
+    xmake install -o /usr -y; \
+    /usr/bin/sage --version; \
+    rm -rf /tmp/sage-src /tmp/sage.tar.gz
 
 WORKDIR /build
