@@ -38,5 +38,5 @@ install = [
 ]
 
 [source]
-url = "https://codeload.github.com/antinomie1/sage/tar.gz/f61cdea1d601541756c0669966cd2b1e0119b7ef"
+url = "https://github.com/antinomie1/sage/archive/f61cdea1d601541756c0669966cd2b1e0119b7ef.tar.gz"
 sha256 = "44bd80623164d86bfb5d664b3edd703d3d72e3eacfdb8411973d7bb0162fb517"
