@@ -388,6 +388,8 @@ def main() -> int:
         sysroot_binary.write_bytes(b"\x7fELFfixture")
         sysroot_binary.chmod(0o755)
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
+        perl_root = sysroot_library / "perl5/5.44/core_perl"
+        (perl_root / "CORE").mkdir(parents=True)
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
         )
@@ -403,6 +405,19 @@ def main() -> int:
             "exec /lib/ld-linux-aarch64.so.1 --library-path" in wrapper
             and "LD_LIBRARY_PATH" not in wrapper,
             True,
+        )
+        failed += not check(
+            "Stage1 tool wrappers locate private interpreter libraries",
+            str(perl_root / "CORE") in wrapper,
+            True,
+        )
+        interpreter_environment = build.stage1_build_environment(
+            seed, sysroot_library.parents[1]
+        )
+        failed += not check(
+            "Stage1 interpreters locate modules inside the isolated sysroot",
+            interpreter_environment["PERL5LIB"].split(":")[0],
+            str(perl_root),
         )
 
         (cache / digest).write_bytes(b"corrupt")

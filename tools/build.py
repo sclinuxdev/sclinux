@@ -492,6 +492,14 @@ def prepend_environment(
     environment[name] = separator.join(values + ([current] if current else []))
 
 
+def stage1_runtime_library_paths(sysroot: Path) -> list[Path]:
+    paths = [sysroot / "usr/lib", sysroot / "usr/lib64", sysroot / "lib", sysroot / "lib64"]
+    perl_root = sysroot / "usr/lib/perl5"
+    if perl_root.is_dir():
+        paths.extend(sorted(perl_root.glob("*/core_perl/CORE")))
+    return paths
+
+
 def stage1_build_environment(
     seed: dict | None = None, sysroot: Path | None = None
 ) -> dict[str, str]:
@@ -534,6 +542,19 @@ def stage1_build_environment(
         )
         prepend_environment(environment, "ACLOCAL_PATH", [str(usr / "share/aclocal")])
         prepend_environment(environment, "CMAKE_PREFIX_PATH", [str(usr)])
+        perl_root = usr / "lib/perl5"
+        if perl_root.is_dir():
+            perl_paths = [
+                path
+                for version in sorted(perl_root.iterdir())
+                for path in (
+                    version / "core_perl",
+                    version / "vendor_perl",
+                    version / "site_perl",
+                )
+                if path.is_dir()
+            ]
+            prepend_environment(environment, "PERL5LIB", [str(path) for path in perl_paths])
         prepend_environment(
             environment,
             "CPPFLAGS",
@@ -618,15 +639,7 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     wrapper_root = sysroot / ".stage1-tool-wrappers"
     shutil.rmtree(wrapper_root, ignore_errors=True)
     resolved_sysroot = sysroot.resolve()
-    library_path = ":".join(
-        str(path)
-        for path in (
-            sysroot / "usr/lib",
-            sysroot / "usr/lib64",
-            sysroot / "lib",
-            sysroot / "lib64",
-        )
-    )
+    library_path = ":".join(str(path) for path in stage1_runtime_library_paths(sysroot))
     for relative, wrapper_name in (("usr/bin", "usr-bin"), ("usr/sbin", "usr-sbin")):
         source = sysroot / relative
         if not source.is_dir():
@@ -684,6 +697,7 @@ def run_stage1_packages(
         )
     clean_stage1_build_sysroot(sysroot)
     refresh_stage1_tool_wrappers(sysroot, architecture)
+    environment = stage1_build_environment(sysroot=sysroot)
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
@@ -704,6 +718,7 @@ def run_stage1_packages(
         stage_stage1_package(entry, recipe_path, sysroot, environment)
         clean_stage1_build_sysroot(sysroot)
         refresh_stage1_tool_wrappers(sysroot, architecture)
+        environment = stage1_build_environment(sysroot=sysroot)
         clean_stage1_workdirs(recipe_path.parent)
         locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
