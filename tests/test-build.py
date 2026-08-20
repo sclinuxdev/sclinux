@@ -56,6 +56,11 @@ def main() -> int:
         "BOOTX64.EFI",
     )
     failed += not check(
+        "architectures map to distinct OCI platforms",
+        {values["oci_platform"] for values in architectures.values()},
+        {"linux/amd64", "linux/arm64"},
+    )
+    failed += not check(
         "boolean schema versions are rejected",
         config_error("schema_version = true\n[architectures]\n"),
         "schema_version must be the integer 1",
@@ -64,7 +69,7 @@ def main() -> int:
         "missing architecture fields are rejected",
         config_error("schema_version = 1\n[architectures.aarch64]\ngnu_triplet = \"a\"\n"),
         "[architectures.aarch64] missing field(s): dynamic_linker, efi_boot_name, "
-        "kernel_arch, kernel_image, qemu_machine, qemu_system",
+        "kernel_arch, kernel_image, oci_platform, qemu_machine, qemu_system",
     )
 
     result = subprocess.run(
@@ -91,7 +96,45 @@ def main() -> int:
         True,
     )
 
-    total = 9
+    seed = build.load_seed_lock()
+    failed += not check(
+        "Stage0 locks one manifest per architecture",
+        set(seed["manifests"]),
+        set(architectures),
+    )
+    failed += not check(
+        "Stage0 package list remains sorted",
+        seed["packages"],
+        sorted(seed["packages"]),
+    )
+    containerfile = (REPO / "Stage0" / "Containerfile").read_text()
+    forbidden = [line for line in containerfile.splitlines() if line.startswith(("COPY ", "ADD "))]
+    failed += not check("Stage0 never copies the repository into its seed", forbidden, [])
+    failed += not check(
+        "Stage0 allows xmake inside the root-owned build container",
+        "ENV XMAKE_ROOT=y" in containerfile,
+        True,
+    )
+
+    command = build.stage0_command(
+        "aarch64",
+        build.resolve_architecture("aarch64"),
+        seed,
+        build.stage0_tag("aarch64", seed),
+    )
+    failed += not check("Stage0 selects the ARM64 OCI platform", "linux/arm64" in command, True)
+    failed += not check(
+        "Stage0 disables timestamped BuildKit provenance",
+        "--provenance=false" in command,
+        True,
+    )
+    failed += not check(
+        "Stage0 pins the OCI index digest",
+        any(seed["index_digest"] in argument for argument in command),
+        True,
+    )
+
+    total = 17
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

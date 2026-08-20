@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import shlex
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -14,7 +15,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO / "config" / "architectures.toml"
+DEFAULT_SEED_LOCK = REPO / "Stage0" / "seed.lock.toml"
 ARCH_NAME = re.compile(r"^[a-z0-9_]+$")
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+SNAPSHOT = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
+PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
 ARCH_FIELDS = (
     "gnu_triplet",
     "kernel_arch",
@@ -23,6 +28,7 @@ ARCH_FIELDS = (
     "dynamic_linker",
     "qemu_system",
     "qemu_machine",
+    "oci_platform",
 )
 
 
@@ -85,9 +91,144 @@ def resolve_architecture(name: str, path: Path = DEFAULT_CONFIG) -> dict[str, st
     return {"arch": name, **values}
 
 
+def load_seed_lock(path: Path = DEFAULT_SEED_LOCK) -> dict:
+    try:
+        data = tomllib.loads(path.read_text())
+    except FileNotFoundError as exc:
+        raise ConfigError(f"Stage0 seed lock does not exist: {path}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
+
+    allowed = {
+        "schema_version",
+        "image",
+        "suite",
+        "snapshot",
+        "source_date_epoch",
+        "index_digest",
+        "packages",
+        "manifests",
+    }
+    unknown = set(data) - allowed
+    if unknown:
+        raise ConfigError(f"unknown Stage0 key(s): {', '.join(sorted(unknown))}")
+    if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
+        raise ConfigError("Stage0 schema_version must be the integer 1")
+
+    for field in ("image", "suite"):
+        if not isinstance(data.get(field), str) or not data[field]:
+            raise ConfigError(f"Stage0 {field} must be a non-empty string")
+    if not isinstance(data.get("snapshot"), str) or not SNAPSHOT.fullmatch(data["snapshot"]):
+        raise ConfigError("Stage0 snapshot must use YYYYMMDDTHHMMSSZ")
+    if type(data.get("source_date_epoch")) is not int or data["source_date_epoch"] <= 0:
+        raise ConfigError("Stage0 source_date_epoch must be a positive integer")
+    if not isinstance(data.get("index_digest"), str) or not DIGEST.fullmatch(data["index_digest"]):
+        raise ConfigError("Stage0 index_digest must be a sha256 OCI digest")
+
+    packages = data.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise ConfigError("Stage0 packages must be a non-empty array")
+    if not all(isinstance(package, str) and PACKAGE_NAME.fullmatch(package) for package in packages):
+        raise ConfigError("Stage0 packages contains an invalid package name")
+    if packages != sorted(set(packages)):
+        raise ConfigError("Stage0 packages must be unique and sorted")
+
+    manifests = data.get("manifests")
+    if not isinstance(manifests, dict) or not manifests:
+        raise ConfigError("[manifests] must contain architecture digests")
+    for name, digest in manifests.items():
+        if not ARCH_NAME.fullmatch(name) or not isinstance(digest, str) or not DIGEST.fullmatch(digest):
+            raise ConfigError(f"invalid Stage0 manifest entry for {name!r}")
+    return data
+
+
 def shell_environment(architecture: dict[str, str]) -> str:
     variables = {f"SC_{key.upper()}": value for key, value in architecture.items()}
     return "\n".join(f"{key}={shlex.quote(value)}" for key, value in variables.items())
+
+
+def stage0_tag(name: str, seed: dict) -> str:
+    return f"shenchen-stage0:{name}-{seed['index_digest'][7:19]}"
+
+
+def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str) -> list[str]:
+    try:
+        manifest_digest = seed["manifests"][name]
+    except KeyError as exc:
+        raise ConfigError(f"Stage0 seed has no manifest for {name}") from exc
+
+    image = f"{seed['image']}@{seed['index_digest']}"
+    packages = " ".join(seed["packages"])
+    return [
+        "docker",
+        "buildx",
+        "build",
+        "--provenance=false",
+        "--load",
+        "--platform",
+        architecture["oci_platform"],
+        "--file",
+        str(REPO / "Stage0" / "Containerfile"),
+        "--tag",
+        tag,
+        "--label",
+        f"org.shenchen.stage0.index-digest={seed['index_digest']}",
+        "--label",
+        f"org.shenchen.stage0.manifest-digest={manifest_digest}",
+        "--build-arg",
+        f"SEED_IMAGE={image}",
+        "--build-arg",
+        f"DEBIAN_SUITE={seed['suite']}",
+        "--build-arg",
+        f"DEBIAN_SNAPSHOT={seed['snapshot']}",
+        "--build-arg",
+        f"SOURCE_DATE_EPOCH={seed['source_date_epoch']}",
+        "--build-arg",
+        f"APT_PACKAGES={packages}",
+        str(REPO / "Stage0"),
+    ]
+
+
+def write_stage0_metadata(
+    name: str, architecture: dict[str, str], seed: dict, tag: str
+) -> Path:
+    query = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            architecture["oci_platform"],
+            tag,
+            "dpkg-query",
+            "-W",
+            "-f=${binary:Package}\\t${Version}\\n",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    image_id = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", tag],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    packages = dict(line.split("\t", 1) for line in query.stdout.splitlines())
+    metadata = {
+        "architecture": name,
+        "oci_platform": architecture["oci_platform"],
+        "image": tag,
+        "image_id": image_id,
+        "seed_index_digest": seed["index_digest"],
+        "seed_manifest_digest": seed["manifests"][name],
+        "snapshot": seed["snapshot"],
+        "packages": packages,
+    }
+    output = REPO / "out" / name / "stage0.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    return output
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -102,6 +243,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     commands = parser.add_subparsers(dest="command", required=True)
     info = commands.add_parser("arch-info", help="print resolved target architecture values")
     info.add_argument("--format", choices=("json", "shell"), default="json")
+    stage0 = commands.add_parser("stage0", help="build the locked Stage0 seed image")
+    stage0.add_argument("--seed-lock", type=Path, default=DEFAULT_SEED_LOCK)
+    stage0.add_argument("--tag", help="override the local container image tag")
+    stage0.add_argument("--dry-run", action="store_true", help="print the docker command")
     return parser.parse_args(argv)
 
 
@@ -118,6 +263,26 @@ def main(argv: list[str] | None = None) -> int:
             print(shell_environment(architecture))
         else:
             print(json.dumps(architecture, indent=2, sort_keys=True))
+    elif args.command == "stage0":
+        try:
+            seed = load_seed_lock(args.seed_lock)
+            if set(seed["manifests"]) != set(load_architectures(args.config)):
+                raise ConfigError("Stage0 manifests must match the configured architectures")
+            tag = args.tag or stage0_tag(args.arch, seed)
+            command = stage0_command(args.arch, architecture, seed, tag)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if args.dry_run:
+            print(shlex.join(command))
+            return 0
+        try:
+            subprocess.run(command, check=True)
+            output = write_stage0_metadata(args.arch, architecture, seed, tag)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"error: Stage0 build failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"wrote {output.relative_to(REPO)}")
     return 0
 
 

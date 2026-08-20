@@ -1,0 +1,44 @@
+# tools/build.py always overrides this with the digest from seed.lock.toml.
+ARG SEED_IMAGE=invalid.invalid/stage0-seed-must-be-pinned
+FROM ${SEED_IMAGE}
+
+ARG APT_PACKAGES
+ARG DEBIAN_SNAPSHOT
+ARG DEBIAN_SUITE
+ARG SOURCE_DATE_EPOCH
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+    TZ=UTC
+
+RUN set -eu; \
+    test -n "${APT_PACKAGES}"; \
+    test -n "${DEBIAN_SNAPSHOT}"; \
+    test -n "${DEBIAN_SUITE}"; \
+    printf '%s\n' \
+        'Types: deb' \
+        "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
+        "Suites: ${DEBIAN_SUITE}" \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp' \
+        > /etc/apt/sources.list.d/debian.sources; \
+    printf '%s\n' \
+        'Acquire::Check-Valid-Until false;' \
+        'Acquire::Retries "5";' \
+        'Acquire::http::Pipeline-Depth "0";' \
+        > /etc/apt/apt.conf.d/99snapshot; \
+    apt-get update; \
+    for attempt in 1 2 3 4 5; do \
+        if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${APT_PACKAGES}; then \
+            break; \
+        fi; \
+        test "${attempt}" -lt 5; \
+        sleep "$((attempt * 2))"; \
+    done; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+ENV XMAKE_ROOT=y
+
+WORKDIR /build
