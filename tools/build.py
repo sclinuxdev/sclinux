@@ -16,6 +16,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO / "config" / "architectures.toml"
 DEFAULT_SEED_LOCK = REPO / "Stage0" / "seed.lock.toml"
+DEFAULT_RECIPES = REPO / "Stage1" / "recipes"
 ARCH_NAME = re.compile(r"^[a-z0-9_]+$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 SNAPSHOT = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
@@ -151,6 +152,50 @@ def stage0_tag(name: str, seed: dict) -> str:
     return f"shenchen-stage0:{name}-{seed['index_digest'][7:19]}"
 
 
+def render_stage1_recipe(recipe: str, architecture: dict[str, str], output: Path) -> Path:
+    if not PACKAGE_NAME.fullmatch(recipe):
+        raise ConfigError(f"invalid Stage1 recipe name: {recipe!r}")
+    source = DEFAULT_RECIPES / recipe / "recipe.toml"
+    try:
+        text = source.read_text()
+        data = tomllib.loads(text)
+    except FileNotFoundError as exc:
+        raise ConfigError(f"Stage1 recipe does not exist: {recipe}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"invalid TOML in {source}: {exc}") from exc
+
+    package = data.get("package")
+    if not isinstance(package, dict) or package.get("name") != recipe:
+        raise ConfigError(f"Stage1 recipe package name must be {recipe!r}")
+
+    lines = text.splitlines()
+    try:
+        package_line = next(i for i, line in enumerate(lines) if line.strip() == "[package]")
+    except StopIteration as exc:
+        raise ConfigError(f"Stage1 recipe has no [package] table: {recipe}") from exc
+
+    end = next(
+        (i for i in range(package_line + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+        len(lines),
+    )
+    arch_line = next(
+        (i for i in range(package_line + 1, end) if re.match(r"^\s*arch\s*=", lines[i])),
+        None,
+    )
+    rendered_arch = f'arch = "{architecture["arch"]}"'
+    if arch_line is None:
+        lines.insert(package_line + 1, rendered_arch)
+    else:
+        lines[arch_line] = rendered_arch
+    rendered = "\n".join(lines) + "\n"
+
+    if tomllib.loads(rendered)["package"]["arch"] != architecture["arch"]:
+        raise ConfigError(f"failed to render architecture for Stage1 recipe: {recipe}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(rendered)
+    return output
+
+
 def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str) -> list[str]:
     try:
         manifest_digest = seed["manifests"][name]
@@ -247,6 +292,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stage0.add_argument("--seed-lock", type=Path, default=DEFAULT_SEED_LOCK)
     stage0.add_argument("--tag", help="override the local container image tag")
     stage0.add_argument("--dry-run", action="store_true", help="print the docker command")
+    recipe = commands.add_parser(
+        "stage1-recipe", help="render one canonical recipe for the target architecture"
+    )
+    recipe.add_argument("recipe", help="recipe name under Stage1/recipes")
+    recipe.add_argument("--output", type=Path, help="override the rendered recipe path")
     return parser.parse_args(argv)
 
 
@@ -283,6 +333,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: Stage0 build failed: {exc}", file=sys.stderr)
             return 1
         print(f"wrote {output.relative_to(REPO)}")
+    elif args.command == "stage1-recipe":
+        output = args.output or REPO / "out" / args.arch / "recipes" / args.recipe / "recipe.toml"
+        try:
+            rendered = render_stage1_recipe(args.recipe, architecture, output)
+        except (ConfigError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            print(f"wrote {rendered.relative_to(REPO)}")
+        except ValueError:
+            print(f"wrote {rendered}")
     return 0
 
 

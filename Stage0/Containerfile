@@ -40,5 +40,6 @@ RUN set -eu; \
     rm -rf /var/lib/apt/lists/*
 
 ENV XMAKE_ROOT=y
+ENV XMAKE_STATS=false
 
 WORKDIR /build

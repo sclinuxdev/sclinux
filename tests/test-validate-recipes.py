@@ -274,6 +274,7 @@ def check_integration_rules() -> tuple[int, int]:
         for rel in expected:
             write_recipe(root / rel, '"fixed"')
         write_recipe(root / "packages/shc/src/vendor/recipe.toml", '"fixed"')
+        write_recipe(root / "out/aarch64/recipes/shc/recipe.toml", '"fixed"')
         write_recipe(root / ".git/fixtures/recipe.toml", '"fixed"')
 
         old_repo = validator.REPO

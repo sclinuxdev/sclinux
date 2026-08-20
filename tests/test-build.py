@@ -115,6 +115,11 @@ def main() -> int:
         "ENV XMAKE_ROOT=y" in containerfile,
         True,
     )
+    failed += not check(
+        "Stage0 disables xmake network statistics",
+        "ENV XMAKE_STATS=false" in containerfile,
+        True,
+    )
 
     command = build.stage0_command(
         "aarch64",
@@ -134,7 +139,32 @@ def main() -> int:
         True,
     )
 
-    total = 17
+    with tempfile.TemporaryDirectory() as directory:
+        output = Path(directory) / "sage" / "recipe.toml"
+        build.render_stage1_recipe(
+            "sage", build.resolve_architecture("aarch64"), output
+        )
+        rendered = build.tomllib.loads(output.read_text())
+        canonical = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "sage" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 renderer writes the target architecture",
+            rendered["package"]["arch"],
+            "aarch64",
+        )
+        failed += not check(
+            "Stage1 renderer preserves the locked Sage checksum",
+            rendered["source"]["sha256"],
+            canonical["source"]["sha256"],
+        )
+        failed += not check(
+            "canonical Stage1 recipes remain architecture-neutral",
+            "arch" in canonical["package"],
+            False,
+        )
+
+    total = 21
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

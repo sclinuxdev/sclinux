@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parent.parent
 # unpacked from a source tarball would otherwise be validated as if it were
 # ours.
 BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
+GENERATED_TOP_LEVEL_DIRS = {"out"}
 
 MISSING_CHECKSUM = "[source] sha256 is required whenever url is set"
 
@@ -225,7 +226,7 @@ def discover_recipes() -> list[Path]:
     found = []
     for path in REPO.rglob("recipe.toml"):
         rel = path.relative_to(REPO)
-        if rel.parts[0] == ".git" or is_build_artifact(path):
+        if rel.parts[0] in {".git", *GENERATED_TOP_LEVEL_DIRS} or is_build_artifact(path):
             continue
         found.append(path)
     return sorted(found)

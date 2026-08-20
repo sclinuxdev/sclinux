@@ -5,18 +5,19 @@ name = "sage"
 version = "0.2.0"
 release = "5"
 description = "Universal Multi-Layer Linux Package Manager"
-license = "MIT"
+license = "BSD-2-Clause"
 channel = "system"
 
 dependencies = [
     "lmdb >= 0.9.30",
-    "zstd >= 1.5.0",
-    "tomlplusplus >= 3.4.0",
+    "zstd-libs >= 1.5.0",
     "curl >= 8.0.0",
     "gcc-libs >= 15.3.0",
 ]
 
 build_dependencies = [
+    "gcc >= 15.3.0",
+    "tomlplusplus >= 3.4.0",
     "xmake >= 3.0.0",
 ]
 
@@ -28,11 +29,14 @@ prepare = [
 ]
 
 build = [
-    # 全量重建在 chroot 内进行：宿主编排器将 distro 根 bind-mount 到 /distro
-    "cd /distro/sage && XMAKE_ROOT=y xmake f -c -m release -y && XMAKE_ROOT=y xmake -y",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake f -c -m release -y",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake -y",
 ]
 
 install = [
-    "mkdir -p $DESTDIR/usr/bin $DESTDIR/etc/sage",
-    "cp -av /distro/sage/build/linux/x86_64/release/sage $DESTDIR/usr/bin/sage",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake install -o \"$DESTDIR/usr\" -y",
 ]
+
+[source]
+url = "https://codeload.github.com/antinomie1/sage/tar.gz/f61cdea1d601541756c0669966cd2b1e0119b7ef"
+sha256 = "44bd80623164d86bfb5d664b3edd703d3d72e3eacfdb8411973d7bb0162fb517"
