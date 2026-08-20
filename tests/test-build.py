@@ -383,12 +383,21 @@ def main() -> int:
         sysroot_binary.write_bytes(b"\x7fELFfixture")
         sysroot_binary.chmod(0o755)
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
-        build.refresh_stage1_tool_wrappers(sysroot_library.parents[1])
+        build.refresh_stage1_tool_wrappers(
+            sysroot_library.parents[1], build.resolve_architecture("aarch64")
+        )
         wrapper_root = sysroot_library.parents[1] / ".stage1-tool-wrappers/usr-bin"
         failed += not check(
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
             ["pkg-config", "pkgconf"],
+        )
+        wrapper = (wrapper_root / "pkgconf").read_text()
+        failed += not check(
+            "Stage1 tool wrappers do not leak target libraries to child processes",
+            "exec /lib/ld-linux-aarch64.so.1 --library-path" in wrapper
+            and "LD_LIBRARY_PATH" not in wrapper,
+            True,
         )
 
         (cache / digest).write_bytes(b"corrupt")

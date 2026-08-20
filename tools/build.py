@@ -608,7 +608,12 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         archive.unlink()
 
 
-def refresh_stage1_tool_wrappers(sysroot: Path) -> None:
+def stage1_dynamic_loader(architecture: dict[str, str]) -> str:
+    directory = "/lib64" if architecture["arch"] == "x86_64" else "/lib"
+    return f"{directory}/{architecture['dynamic_linker']}"
+
+
+def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) -> None:
     wrapper_root = sysroot / ".stage1-tool-wrappers"
     shutil.rmtree(wrapper_root, ignore_errors=True)
     resolved_sysroot = sysroot.resolve()
@@ -640,7 +645,8 @@ def refresh_stage1_tool_wrappers(sysroot: Path) -> None:
             wrapper = destination / executable.name
             wrapper.write_text(
                 "#!/bin/sh\n"
-                f"exec env LD_LIBRARY_PATH={shlex.quote(library_path)} "
+                f"exec {shlex.quote(stage1_dynamic_loader(architecture))} "
+                f"--library-path {shlex.quote(library_path)} "
                 f"{shlex.quote(str(executable))} \"$@\"\n"
             )
             wrapper.chmod(0o755)
@@ -676,7 +682,7 @@ def run_stage1_packages(
             locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
         )
     clean_stage1_build_sysroot(sysroot)
-    refresh_stage1_tool_wrappers(sysroot)
+    refresh_stage1_tool_wrappers(sysroot, architecture)
     for name in packages:
         recipe_path = recipes / name / "recipe.toml"
         if not recipe_path.is_file():
@@ -696,7 +702,7 @@ def run_stage1_packages(
         locked_by_name[name] = entry
         stage_stage1_package(entry, recipe_path, sysroot, environment)
         clean_stage1_build_sysroot(sysroot)
-        refresh_stage1_tool_wrappers(sysroot)
+        refresh_stage1_tool_wrappers(sysroot, architecture)
         clean_stage1_workdirs(recipe_path.parent)
         locked = [locked_by_name[name] for name in manifest if name in locked_by_name]
         write_packages_lock(locked, workspace / "packages.lock")
