@@ -591,7 +591,15 @@ def stage1_build_environment(
         prepend_environment(
             environment,
             "LDFLAGS",
-            [f"-L{usr / 'lib'}", f"-Wl,-rpath-link,{usr / 'lib'}"],
+            (
+                [f"--sysroot={sysroot.resolve()}"]
+                if any(
+                    (sysroot / directory / "libc.so.6").is_file()
+                    for directory in ("usr/lib", "usr/lib64", "lib", "lib64")
+                )
+                else []
+            )
+            + [f"-L{usr / 'lib'}", f"-Wl,-rpath-link,{usr / 'lib'}"],
             separator=" ",
         )
     return environment

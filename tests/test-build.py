@@ -459,6 +459,7 @@ def main() -> int:
         )
         target_loader = sysroot_library / "ld-linux-aarch64.so.1"
         target_loader.write_bytes(b"\x7fELFfixture")
+        (sysroot_library / "libc.so.6").write_bytes(b"\x7fELFfixture")
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
         )
@@ -470,6 +471,11 @@ def main() -> int:
         )
         interpreter_environment = build.stage1_build_environment(
             seed, sysroot_library.parents[1]
+        )
+        failed += not check(
+            "Stage1 links through its own sysroot after glibc is staged",
+            interpreter_environment["LDFLAGS"].split()[0],
+            f"--sysroot={sysroot_library.parents[1].resolve()}",
         )
         failed += not check(
             "Stage1 scripts locate Autoconf modules inside the isolated sysroot",
