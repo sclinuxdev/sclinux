@@ -78,6 +78,26 @@ CASES: list[tuple[str, bool, str]] = [
         'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\ninstall = [42]\n',
     ),
     (
+        "a scalar phase is rejected without crashing the validator",
+        False,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\ninstall = 42\n',
+    ),
+    (
+        "scalar dependencies are rejected without crashing the validator",
+        False,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\ndependencies = "linux"\n',
+    ),
+    (
+        "a boolean is not an integer schema version",
+        False,
+        'schema_version = true\n[package]\nname = "x"\nversion = "1.0"\ninstall = [\'echo hi\']\n',
+    ),
+    (
+        "a float is not an integer schema version",
+        False,
+        'schema_version = 1.0\n[package]\nname = "x"\nversion = "1.0"\ninstall = [\'echo hi\']\n',
+    ),
+    (
         "[package] is mandatory -- sage rejects the recipe outright without it",
         False,
         'schema_version = 1\ninstall = [\'echo hi\']\n',

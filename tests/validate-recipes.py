@@ -76,7 +76,8 @@ def validate(path: Path) -> list[str]:
     except tomllib.TOMLDecodeError as exc:
         return [f"not valid TOML: {exc}"]
 
-    if data.get("schema_version") != 1:
+    schema_version = data.get("schema_version")
+    if type(schema_version) is not int or schema_version != 1:
         errors.append("schema_version must be 1")
 
     pkg = data.get("package")
@@ -117,12 +118,14 @@ def validate(path: Path) -> list[str]:
         cmd
         for table, _ in scopes
         for field in MERGED_PHASES
-        for cmd in (table.get(field) or [])
+        if isinstance(table.get(field), list)
+        for cmd in table[field]
     ]
     merged_deps = [
         dep
         for table, _ in scopes
-        for dep in (table.get("dependencies") or [])
+        if isinstance(table.get("dependencies"), list)
+        for dep in table["dependencies"]
     ]
     # A package with no phases is legitimate only as a meta-package: no files,
     # just a dependency list (this is what `base` will be).
