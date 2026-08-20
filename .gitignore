@@ -35,3 +35,9 @@ compile_commands.json
 # ---- Sage package artifacts ----
 *.pkg.tar.zst
 *.mdb
+index.toml
+
+# `sage build` creates these inside each recipe directory
+packages/*/distfiles/
+packages/*/src/
+packages/*/pkg/

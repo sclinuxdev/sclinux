@@ -1,0 +1,45 @@
+# shc -- ShenChen Linux shorthand front-end for Sage.
+#
+# The first ShenChen Linux package. Deliberately trivial: it installs a
+# single shell script, so it exercises the recipe -> build -> archive ->
+# install -> query -> remove chain end to end without dragging a compiler
+# or a network fetch into the first run.
+#
+# Build:
+#   sage build ./packages/shc
+#
+# Install into a throwaway root (never test against /):
+#   sage --root /tmp/sctest install shc
+#
+# Note: this recipe has no [source] section, so `sage build` skips the
+# fetch/unpack phases and runs the commands below with the recipe
+# directory as the working directory.
+
+schema_version = 1
+
+[package]
+name = "shc"
+version = "1.0.0"
+release = "1"
+description = "ShenChen Linux shorthand front-end for the Sage package manager"
+license = "BSD-3-Clause"
+channel = "system"
+
+# shc execs /usr/bin/sage; it is useless without it.
+dependencies = ["sage"]
+
+# `sage build` exports DESTDIR, PREFIX, RECIPE_DIR, SRCDIR and PKGDIR,
+# then runs prepare -> build -> install. Only `install` is needed here:
+# there is nothing to configure and nothing to compile.
+#
+# The script is referenced out of the repository's scripts/ directory
+# rather than copied next to this recipe, so there is exactly one copy
+# of shc in the tree and it cannot drift.
+#
+# `mkdir -p` + `install -m755` rather than `install -Dm755`: -D is a GNU
+# coreutils extension, and avoiding it keeps this recipe verifiable on any
+# host, not only on a GNU userland.
+install = [
+    'mkdir -p "$DESTDIR/usr/bin"',
+    'install -m755 "$RECIPE_DIR/../../scripts/shc" "$DESTDIR/usr/bin/shc"',
+]

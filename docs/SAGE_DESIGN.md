@@ -103,9 +103,15 @@ graph TB
 
 采用 `*.pkg.tar.zst` 作为标准包格式，由原生流式 Tar 解压引擎配合 64KB 环形缓冲区与 `libzstd` 流式解压直接写入磁盘，消除旧式 `libarchive` 内存开销。
 
+### 归档命名
+
+`sage build` 产出的文件名为 **`{name}-{version}-{release}.pkg.tar.zst`，不含架构后缀**。
+
+而 `sage install` 在本地查找包文件时，**优先尝试带架构的 `{name}-{version}-{release}-{arch}.pkg.tar.zst`，未命中再回退到无架构形式**。两种命名当前都能被安装，但构建端只会产出后者——`arch` 字段存在于 `manifest.toml`（默认 `x86_64`），并未进入构建产物的文件名。
+
 ### 归档内部结构规范：
 ```
-pkgname-1.0.0-1-x86_64.pkg.tar.zst
+pkgname-1.0.0-1.pkg.tar.zst
 ├── .METADATA/
 │   ├── manifest.toml     # 包名、版本、构建号、许可证、Provides、依赖关系
 │   ├── files.idx         # 相对路径、文件大小、权限 Mode、SHA256 校验和
@@ -118,6 +124,49 @@ pkgname-1.0.0-1-x86_64.pkg.tar.zst
 打包阶段 `sage build` 会自动遍历 `data/` 目录中的 ELF 目标：
 * 读取 `.dynamic` 段，将 `DT_NEEDED` 提取并转换为动态运行依赖（如 `so:libc.so.6`）。
 * 将 `DT_SONAME` 提取并注册为当前包的 Provides 符号。
+
+### `recipe.toml` 构建配方规范
+
+`sage build <RECIPE_DIR>` 的输入。以下字段与上游 `sage::package::Recipe::parse_toml` 逐项核对：
+
+```toml
+schema_version = 1
+
+[package]
+name        = "ripgrep"        # 必需
+version     = "14.1.0"         # 必需
+release     = "1"              # 可选，默认 "1"
+description = "..."            # 可选
+license     = "MIT"            # 可选
+channel     = "system"         # 可选，默认 "system"
+
+dependencies       = ["so:libc.so.6"]   # 运行时依赖
+build_dependencies = ["rust"]           # 构建期依赖
+provides           = ["rg"]             # 额外提供的符号
+
+# 构建阶段命令，依次执行 prepare -> build -> install
+prepare = ["..."]
+build   = ["cargo build --release"]
+install = ['install -Dm755 target/release/rg "$DESTDIR/usr/bin/rg"']
+
+[source]
+url    = "https://.../ripgrep-14.1.0.tar.gz"   # 省略则跳过拉取与解包
+sha256 = "..."                                  # 省略则跳过校验（不建议）
+```
+
+**执行环境**：三个阶段的命令均以 `sh` 执行，并导出以下变量：
+
+| 变量 | 含义 |
+| :--- | :--- |
+| `DESTDIR` | 打包暂存根目录（`<RECIPE_DIR>/pkg`），**安装产物必须落在此处** |
+| `PREFIX` | 固定为 `/usr` |
+| `RECIPE_DIR` | 配方目录 |
+| `SRCDIR` | 源码解包目录（`<RECIPE_DIR>/src`） |
+| `PKGDIR` | 同 `DESTDIR` |
+
+**工作目录**：存在 `src/` 时为 `src/`，否则为配方目录本身。因此无 `[source]` 的配方直接在自己的目录下执行。
+
+**字段位置的灵活性**：`dependencies`、`build_dependencies`、`provides` 与三个阶段数组既可置于顶层，也可嵌在 `[package]` 或 `[source]` 内，解析器会合并三处。置于 `[package]` 内最符合 TOML 的书写顺序约束。
 
 ---
 
