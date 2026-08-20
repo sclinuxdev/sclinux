@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -21,6 +22,7 @@ ARCH_NAME = re.compile(r"^[a-z0-9_]+$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 SNAPSHOT = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
 PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
+ARCH_TOKEN = re.compile(r"@SC_[A-Z0-9_]+@")
 ARCH_FIELDS = (
     "gnu_triplet",
     "kernel_arch",
@@ -168,6 +170,14 @@ def render_stage1_recipe(recipe: str, architecture: dict[str, str], output: Path
     if not isinstance(package, dict) or package.get("name") != recipe:
         raise ConfigError(f"Stage1 recipe package name must be {recipe!r}")
 
+    for field, value in architecture.items():
+        text = text.replace(f"@SC_{field.upper()}@", value)
+    unresolved = sorted(set(ARCH_TOKEN.findall(text)))
+    if unresolved:
+        raise ConfigError(
+            f"unknown architecture token(s) in {recipe}: {', '.join(unresolved)}"
+        )
+
     lines = text.splitlines()
     try:
         package_line = next(i for i, line in enumerate(lines) if line.strip() == "[package]")
@@ -192,6 +202,9 @@ def render_stage1_recipe(recipe: str, architecture: dict[str, str], output: Path
     if tomllib.loads(rendered)["package"]["arch"] != architecture["arch"]:
         raise ConfigError(f"failed to render architecture for Stage1 recipe: {recipe}")
     output.parent.mkdir(parents=True, exist_ok=True)
+    for helper in source.parent.iterdir():
+        if helper.is_file() and helper.name != source.name:
+            shutil.copy2(helper, output.parent / helper.name)
     output.write_text(rendered)
     return output
 

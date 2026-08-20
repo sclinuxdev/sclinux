@@ -164,7 +164,59 @@ def main() -> int:
             False,
         )
 
-    total = 21
+        linux_output = Path(directory) / "linux-zen" / "recipe.toml"
+        build.render_stage1_recipe(
+            "linux-zen", build.resolve_architecture("aarch64"), linux_output
+        )
+        linux_text = linux_output.read_text()
+        failed += not check(
+            "Stage1 renderer resolves the ARM kernel build architecture",
+            "ARCH=arm64" in linux_text,
+            True,
+        )
+        failed += not check(
+            "Stage1 renderer selects the ARM kernel image",
+            "arch/arm64/boot/Image" in linux_text,
+            True,
+        )
+        failed += not check(
+            "Stage1 renderer selects the ARM kernel config",
+            "config.aarch64" in linux_text,
+            True,
+        )
+        failed += not check(
+            "Stage1 renderer copies recipe helper files",
+            (linux_output.parent / "config.aarch64").is_file(),
+            True,
+        )
+
+        x86_linux_output = Path(directory) / "linux-zen-x86_64" / "recipe.toml"
+        build.render_stage1_recipe(
+            "linux-zen", build.resolve_architecture("x86_64"), x86_linux_output
+        )
+        x86_linux_text = x86_linux_output.read_text()
+        failed += not check(
+            "Stage1 renderer resolves the x86 kernel build architecture",
+            "ARCH=x86" in x86_linux_text,
+            True,
+        )
+        failed += not check(
+            "Stage1 renderer selects the x86 kernel image",
+            "arch/x86/boot/bzImage" in x86_linux_text,
+            True,
+        )
+
+        gmp_output = Path(directory) / "gmp" / "recipe.toml"
+        build.render_stage1_recipe(
+            "gmp", build.resolve_architecture("x86_64"), gmp_output
+        )
+        failed += not check(
+            "Stage1 renderer resolves the GNU build triplet",
+            "--build=x86_64-pc-linux-gnu" in gmp_output.read_text(),
+            True,
+        )
+
+    total = 28
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

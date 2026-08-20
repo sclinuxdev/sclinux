@@ -11,6 +11,7 @@ others. See docs/SAGE_DESIGN.md §4.
     python3 tests/validate-recipes.py
 """
 
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -24,6 +25,8 @@ BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
 GENERATED_TOP_LEVEL_DIRS = {"out"}
 
 MISSING_CHECKSUM = "[source] sha256 is required whenever url is set"
+INVALID_CHECKSUM = "[source] sha256 must be exactly 64 lowercase hexadecimal characters"
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 # Recipes grandfathered in with a `sha256 = ""` placeholder, pinned BY PATH.
 #
@@ -156,6 +159,8 @@ def validate(path: Path) -> list[str]:
         checksum = src.get("sha256")
         if not isinstance(checksum, str) or not checksum:
             errors.append(MISSING_CHECKSUM)
+        elif not SHA256.fullmatch(checksum):
+            errors.append(INVALID_CHECKSUM)
 
     # Emptiness is judged against the merged view, exactly as sage builds it.
     merged_phases = [
