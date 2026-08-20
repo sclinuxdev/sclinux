@@ -300,6 +300,15 @@ def main() -> int:
             "-Wno-error=format-nonliteral" in libelf["source"]["build"][0],
             True,
         )
+        groff = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "groff" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 groff normalizes generated Perl shebangs",
+            "#!/usr/bin/perl" in groff["source"]["install"][1]
+            and "mmroff" in groff["source"]["install"][1],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -656,7 +665,7 @@ def main() -> int:
         [],
     )
 
-    total = 62
+    total = 63
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
