@@ -388,6 +388,7 @@ def main() -> int:
         sysroot_binary.write_bytes(b"\x7fELFfixture")
         sysroot_binary.chmod(0o755)
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
+        (sysroot_binary.parent / "perl").symlink_to("pkgconf")
         perl_root = sysroot_library / "perl5/5.44/core_perl"
         (perl_root / "CORE").mkdir(parents=True)
         autoconf_modules = sysroot_library.parent / "share/autoconf"
@@ -399,7 +400,7 @@ def main() -> int:
         failed += not check(
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
-            ["pkg-config", "pkgconf"],
+            ["perl", "pkg-config", "pkgconf"],
         )
         wrapper = (wrapper_root / "pkgconf").read_text()
         failed += not check(
@@ -413,13 +414,14 @@ def main() -> int:
             str(perl_root / "CORE") in wrapper,
             True,
         )
-        interpreter_environment = build.stage1_build_environment(
-            seed, sysroot_library.parents[1]
-        )
+        perl_wrapper = (wrapper_root / "perl").read_text()
         failed += not check(
             "Stage1 interpreters locate modules inside the isolated sysroot",
-            interpreter_environment["PERL5LIB"].split(":")[0],
-            str(perl_root),
+            f" -I{perl_root} " in perl_wrapper and "PERL5LIB" not in perl_wrapper,
+            True,
+        )
+        interpreter_environment = build.stage1_build_environment(
+            seed, sysroot_library.parents[1]
         )
         failed += not check(
             "Stage1 scripts locate Autoconf modules inside the isolated sysroot",

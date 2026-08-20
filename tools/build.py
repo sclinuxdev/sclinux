@@ -500,6 +500,22 @@ def stage1_runtime_library_paths(sysroot: Path) -> list[Path]:
     return paths
 
 
+def stage1_perl_module_paths(sysroot: Path) -> list[Path]:
+    perl_root = sysroot / "usr/lib/perl5"
+    if not perl_root.is_dir():
+        return []
+    return [
+        path
+        for version in sorted(perl_root.iterdir())
+        for path in (
+            version / "core_perl",
+            version / "vendor_perl",
+            version / "site_perl",
+        )
+        if path.is_dir()
+    ]
+
+
 def stage1_build_environment(
     seed: dict | None = None, sysroot: Path | None = None
 ) -> dict[str, str]:
@@ -542,19 +558,6 @@ def stage1_build_environment(
         )
         prepend_environment(environment, "ACLOCAL_PATH", [str(usr / "share/aclocal")])
         prepend_environment(environment, "CMAKE_PREFIX_PATH", [str(usr)])
-        perl_root = usr / "lib/perl5"
-        if perl_root.is_dir():
-            perl_paths = [
-                path
-                for version in sorted(perl_root.iterdir())
-                for path in (
-                    version / "core_perl",
-                    version / "vendor_perl",
-                    version / "site_perl",
-                )
-                if path.is_dir()
-            ]
-            prepend_environment(environment, "PERL5LIB", [str(path) for path in perl_paths])
         autoconf_modules = usr / "share/autoconf"
         if autoconf_modules.is_dir():
             environment["autom4te_perllibdir"] = str(autoconf_modules)
@@ -678,11 +681,16 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
             if not is_elf:
                 continue
             wrapper = destination / executable.name
+            interpreter_options = ""
+            if executable.name == "perl" or executable.name.startswith("perl5."):
+                interpreter_options = "".join(
+                    f" -I{shlex.quote(str(path))}" for path in stage1_perl_module_paths(sysroot)
+                )
             wrapper.write_text(
                 "#!/bin/sh\n"
                 f"exec {shlex.quote(stage1_dynamic_loader(architecture))} "
                 f"--library-path {shlex.quote(library_path)} "
-                f"{shlex.quote(str(executable))} \"$@\"\n"
+                f"{shlex.quote(str(executable))}{interpreter_options} \"$@\"\n"
             )
             wrapper.chmod(0o755)
 
