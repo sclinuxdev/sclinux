@@ -95,23 +95,38 @@
 # 1. 召唤并锚定信号碎片，光速构筑系统神装（shc in = sage install）
 shc in hyprland neofetch-mew
 
-# 2. 开辟多重时空：安装软件包至指定隔离工具链通道（Toolchain Channel）
-shc in --channel rust-nightly rust
+# 2. 开辟多重时空：切换至隔离工具链槽位（Toolchain Channel）
+shc tc use rust:nightly
 
 # 3. 终焉对齐协议：读取 /etc/sage/system.toml 一键声明式重铸全系统节点
 shc rebuild
 
 # 4. 纳秒级洞察万物真名与所有权归属
-shc query owner /usr/bin/hyprland
+shc q owner /usr/bin/hyprland
 
-# 5. 检查神宸系统与信号场共鸣状态
+# 5. 巡视多重时空：列出已注册的隔离工具链通道
+shc tc list
+
+# 6. 检查神宸系统与信号场共鸣状态
 shc status --full
 ```
 
 > [!TIP]
-> 💡 **命令机制与软链接提示 (Symlink & Invocation Guide)**：
-> - **极客盲打首选**：神宸 Linux 系统默认在 `/usr/bin/shc` 预置了指向核心包管理二进制 `/usr/bin/sage` 的符号软链接（`shc -> /usr/bin/sage`），只需敲击 3 个字符 `shc` 即可完成全套盲打操作（如 `shc in`、`shc rb`、`shc q`）。
-> - **无缝完全等价**：`shc` 与 `sage` 在执行层面 100% 行为一致，共享完全相同的参数体系、LMDB 状态库（`/var/lib/sage/data.mdb`）与 PubGrub 依赖求解引擎。无论你在终端输入 `shc` 还是 `sage`，均能直接调动系统最底层的包管理神力。
+> 💡 **命令机制与调用提示 (Invocation Guide)**：
+> - **极客盲打首选**：神宸 Linux 在 `/usr/bin/shc` 预置了一层极薄的 POSIX shell 前端（[`scripts/shc`](scripts/shc)），负责把神宸钦定的短别名展开后 `exec` 真正的 `/usr/bin/sage`，只需敲击 3 个字符即可完成全套盲打操作。
+> - **别名对照表**：
+>
+>   | 短 | 全称 | 短 | 全称 | 短 | 全称 |
+>   | :-- | :-- | :-- | :-- | :-- | :-- |
+>   | `in` | `install` | `q` | `query` | `sv` | `service` |
+>   | `rm` | `remove` | `b` | `build` | `tc` | `toolchain` |
+>   | `rb` | `rebuild` | `ch` | `channel` | `st` | `status` |
+>
+> - **别名只在子命令位置生效**：`shc query in` 会原样传给 `sage query in`，绝不会把参数里的 `in` 误伤成 `install`。全局选项写在前面也不影响展开（`shc --root /mnt in foo` → `sage --root /mnt install foo`）。
+> - **非别名 100% 透传**：任何不在上表中的词都原样交给 `sage`，因此 `shc <任意命令>` 与 `sage <任意命令>` 行为完全一致，共享同一套参数体系、同一个 LMDB 状态库（`/var/lib/sage/data.mdb`）与同一个 PubGrub 求解引擎。
+
+> [!NOTE]
+> 上面第 6 条的 `shc status` 依赖上游 Sage 的 `status` 命令，该命令由 [antinomie1/sage#2](https://github.com/antinomie1/sage/pull/2) 引入，**在该 PR 合并前不可用**。其余命令均已在当前上游实现中可用。
 
 ```text
 [OK] Kernel: 6.x.x-shenchen-divine

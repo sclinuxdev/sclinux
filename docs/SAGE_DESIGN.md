@@ -1,7 +1,7 @@
 # 🌿 Sage Package Manager Technical Specification & Architecture Reference
 
 **Spec Version:** 2.0 (本规范文档版本)  
-**Sage Release:** 0.1.0 (上游实现版本，见 `xmake.lua` 的 `set_version`)  
+**Sage Release:** 0.2.0 (二进制 `--version` 报告值；上游 `xmake.lua` 的 `set_version` 仍为 `0.1.0`，待统一)  
 **Status:** Approved  
 **Language Standards:** Modern C++23 (100% C++23 Modules `.cppm`)  
 **Build System:** xmake  
@@ -203,12 +203,16 @@ group = "root"
 sage [全局选项] <子命令> [参数...]
 ```
 
+> [!NOTE]
+> 本章与上游 `src/cli/main.cpp` 的实际实现逐条核对。**通道的增删与同步（`channel add` / `sync`）、按包指定通道的 `--channel` 选项目前均未实现**，下文不再列出；`sage channel` 当前仅打印已配置通道。
+
 ### 全局选项
 ```text
-  --verbose, -v        输出详细诊断信息
-  --quiet, -q          静默模式
-  --help, -h           显示帮助信息
-  --version, -V        显示版本号
+  --root, --sysroot <DIR>  操作目标根目录（默认 /）
+  --dry-run                模拟执行，不修改文件系统
+  --verbose, -v            输出详细诊断信息
+  --help, -h               显示帮助信息
+  --version, -V            显示版本号
 ```
 
 ### 子命令详解
@@ -218,16 +222,16 @@ sage [全局选项] <子命令> [参数...]
 # 安装软件包到系统根通道
 sage install ripgrep neovim
 
-# 安装到特定隔离通道
-sage install --channel python312 python
-
 # 模拟演练（不修改文件系统）
 sage install --dry-run waybar
+
+# 安装到指定 sysroot（交叉构建、容器镜像装配）
+sage --root /mnt/newroot install base glibc
 ```
 
 #### `sage remove <PKG...>`
 ```bash
-# 卸载软件包并清理关联服务
+# 卸载软件包，并自动清理变为孤儿的依赖
 sage remove nginx
 ```
 
@@ -240,26 +244,51 @@ sage rebuild --dry-run
 sage rebuild
 ```
 
-#### `sage channel [list|add|remove|sync]`
+#### `sage channel`
 ```bash
-# 查看所有激活的 Channel 与优先级
-sage channel list
+# 打印当前 root 已配置的全部 Channel（名称、URL、scope、优先级）
+sage channel
+```
+> 通道的定义来源为 `/etc/sage/channels.toml`，目前需手工编辑；命令行增删尚未实现。
 
-# 添加远程 Channel
-sage channel add core https://pkg.distro.org/core --scope system --priority 100
-sage channel add rust-nightly https://pkg.distro.org/rust --scope toolchain --priority 50
+#### `sage toolchain [list|use <category:slot>]`
+```bash
+# 列出全部可用的多槽位工具链
+sage toolchain list
 
-# 同步通道元数据索引
-sage channel sync
+# 切换活动工具链槽位
+sage toolchain use llvm:22
+```
+
+#### `sage java [list|use <slot>]` / `sage rust [list|use <slot>]`
+```bash
+# 管理 OpenJDK/GraalVM/Temurin 版本与 JAVA_HOME
+sage java list
+sage java use 21
+
+# 管理 Rust stable/nightly 版本与目标三元组
+sage rust use nightly
+```
+
+#### `sage shell --with <sub-channel...>`
+```bash
+# 启动携带指定工具链的临时隔离 Shell
+sage shell --with toolchain/llvm:22 --with runtime/python:3.12
 ```
 
 #### `sage build <RECIPE_DIR>`
 ```bash
-# 从 recipe.toml 构建二进制包
+# 从 recipe.toml 构建二进制包（拉源码、校验 sha256、构建、扫描 ELF）
 sage build ./recipes/ripgrep
 ```
 
-#### `sage query [installed|info|files|owner]`
+#### `sage repo index <REPO_DIR> [CHANNEL_NAME]`
+```bash
+# 为本地仓库目录生成 index.toml
+sage repo index ./repo core
+```
+
+#### `sage query [installed|info <pkg>|owner <path>]`
 ```bash
 # 查询已安装软件包列表
 sage query installed
@@ -267,20 +296,33 @@ sage query installed
 # 查询软件包详情
 sage query info ripgrep
 
-# 列出软件包所拥有的文件清单
-sage query files ripgrep
-
 # 纳秒级反查文件所属软件包
 sage query owner /usr/bin/rg
 ```
 
-#### `sage service [list|status|generate]`
+#### `sage service [list|generate <name>]`
 ```bash
 # 列出所有安装的守护进程服务
 sage service list
 
 # 为当前活动 Init 系统手动重新生成服务脚本
 sage service generate sshd
+```
+
+#### `sage status [--full]`
+```bash
+# 概览当前 root 的提供者、通道与数据库状态
+sage status
+
+# 额外列出全部已安装软件包
+sage status --full
+```
+> ⚠️ 由 [antinomie1/sage#2](https://github.com/antinomie1/sage/pull/2) 引入，**该 PR 合并前不可用**。
+
+#### `sage test-suite`
+```bash
+# 运行内置引擎自检套件（别名：sage test）
+sage test-suite
 ```
 
 ---
@@ -367,7 +409,7 @@ graph TD
    - 严禁裸指针与手动 `new`/`delete`。所有 OS 资源析构自动回收。
    - 零拷贝场景优先使用 `std::string_view` 与 `std::span`。
 2. **小而精、高吞吐、总代码行数受控**：
-   - 目标总代码行数严格控制在 2,500 ~ 3,500 行（上限 < 10,000 行）。
+   - 目标总代码行数严格控制在 5,000 ~ 6,000 行（上限 < 10,000 行）。当前上游实现约 5,135 行。
    - 采用数据导向设计（DOD）与值语义，避免多层虚继承与企业级抽象冗余。
    - 全面采用 `std::expected` 单子错误处理与 `std::format` / `std::ranges`。
 3. **零运行时开销的代码复用 (DRY)**：
