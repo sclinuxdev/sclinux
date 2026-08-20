@@ -25,6 +25,10 @@ description = "ShenChen Linux shorthand front-end for the Sage package manager"
 license = "BSD-3-Clause"
 channel = "system"
 
+# shc 是 shell 脚本，与架构无关。该字段需 antinomie1/sage#3 合并后生效；
+# 在此之前 sage 会忽略这个未知键，因此现在写上是安全的、向前兼容的。
+arch = "any"
+
 # shc execs /usr/bin/sage; it is useless without it.
 dependencies = ["sage"]
 

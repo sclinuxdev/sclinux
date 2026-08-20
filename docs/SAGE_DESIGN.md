@@ -107,7 +107,15 @@ graph TB
 
 `sage build` 产出的文件名为 **`{name}-{version}-{release}.pkg.tar.zst`，不含架构后缀**。
 
-而 `sage install` 在本地查找包文件时，**优先尝试带架构的 `{name}-{version}-{release}-{arch}.pkg.tar.zst`，未命中再回退到无架构形式**。两种命名当前都能被安装，但构建端只会产出后者——`arch` 字段存在于 `manifest.toml`（默认 `x86_64`），并未进入构建产物的文件名。
+而 `sage install` 在本地查找包文件时，依次尝试三种形式：
+
+1. `{name}-{version}-{release}-{arch}.pkg.tar.zst` ← 首选
+2. `{name}-{version}-{release}.pkg.tar.zst`
+3. `{name}-{version}.pkg.tar.zst`
+
+**构建端只产出第 2 种，而 `arch` 恰恰是多架构下用来区分同名包的字段。** 索引 `index.toml` 记录 `arch` 却不记录文件名，安装端只能从元数据反推文件名——于是同一个包为两种架构构建会产生同名文件，静默互相覆盖且全程无报错。
+
+> ⚠️ 该缺陷的修复见 [antinomie1/sage#3](https://github.com/antinomie1/sage/pull/3)：构建端改为产出带 `arch` 的名字，并为 `recipe.toml` 增加 `arch` 字段以支持 `arch = "any"`。**合并前上述行为不变。**
 
 ### 归档内部结构规范：
 ```
@@ -139,6 +147,8 @@ release     = "1"              # 可选，默认 "1"
 description = "..."            # 可选
 license     = "MIT"            # 可选
 channel     = "system"         # 可选，默认 "system"
+arch        = "x86_64"         # 可选，默认 "x86_64"；"any" 表示架构无关
+                               # 需 sage#3 合并后生效
 
 dependencies       = ["so:libc.so.6"]   # 运行时依赖
 build_dependencies = ["rust"]           # 构建期依赖
