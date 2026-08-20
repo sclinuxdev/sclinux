@@ -573,6 +573,11 @@ def stage1_build_environment(
             executable = usr / "bin" / command
             if executable.is_file():
                 environment[variable] = str(executable)
+        autom4te = usr / "bin/autom4te"
+        if autom4te.is_file() and autoconf_modules.is_dir():
+            environment["AUTOM4TE"] = (
+                f"{autom4te} --prepend-include={autoconf_modules}"
+            )
         prepend_environment(
             environment,
             "CPPFLAGS",

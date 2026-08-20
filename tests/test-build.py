@@ -440,7 +440,7 @@ def main() -> int:
         failed += not check(
             "Stage1 Autotools scripts call sibling tools inside the isolated sysroot",
             interpreter_environment["AUTOM4TE"],
-            str(sysroot_binary.parent / "autom4te"),
+            f"{sysroot_binary.parent / 'autom4te'} --prepend-include={autoconf_modules}",
         )
 
         leaking_script = fixture_recipe.parent / "pkg/usr/bin/leak"
