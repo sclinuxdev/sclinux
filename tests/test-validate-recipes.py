@@ -9,7 +9,9 @@ fixtures pin the behaviour that was wrong, plus the meta-package case that
     python3 tests/test-validate-recipes.py
 """
 
+import contextlib
 import importlib.util
+import io
 import pathlib
 import sys
 import tempfile
@@ -105,8 +107,214 @@ CASES: list[tuple[str, bool, str]] = [
 ]
 
 
-def main() -> int:
+# The count-based version of this rule accepted a change that added one
+# checksumless recipe while resolving one legacy placeholder, because the total
+# stayed the same. These pin the set semantics that replaced it.
+DEBT_CASES: list[tuple[str, set[str], set[str], set[str], set[str]]] = [
+    (
+        "steady state: everything owed is grandfathered",
+        {"a", "b"}, {"a", "b"},
+        set(), set(),
+    ),
+    (
+        "one added and one resolved -- the count is unchanged, both must surface",
+        {"a", "b"}, {"a", "c"},
+        {"c"}, {"b"},
+    ),
+    (
+        "a newly added checksumless recipe is a violation",
+        {"a"}, {"a", "b"},
+        {"b"}, set(),
+    ),
+    (
+        "a resolved entry left in the file must be de-listed",
+        {"a", "b"}, {"a"},
+        set(), {"b"},
+    ),
+    (
+        "an empty file means every placeholder is a violation",
+        set(), {"a", "b"},
+        {"a", "b"}, set(),
+    ),
+    (
+        "debt fully paid off",
+        {"a"}, set(),
+        set(), {"a"},
+    ),
+]
+
+
+def write_recipe(path: pathlib.Path, checksum: str, package_extra: str = "") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        'schema_version = 1\n'
+        '[package]\n'
+        'name = "x"\n'
+        'version = "1.0"\n'
+        'install = ["true"]\n'
+        f'{package_extra}'
+        '[source]\n'
+        'url = "https://example.invalid/x.tar"\n'
+        f'sha256 = {checksum}\n'
+    )
+
+
+def debt_entries(text: str) -> set[str]:
+    return {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+
+def run_main(root: pathlib.Path, debt: set[str], args: list[str]) -> tuple[int, str, str, str]:
+    old_repo = validator.REPO
+    old_debt_file = validator.CHECKSUM_DEBT_FILE
+    try:
+        validator.REPO = root
+        validator.CHECKSUM_DEBT_FILE = root / "tests" / "checksum-debt.txt"
+        validator.CHECKSUM_DEBT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        validator.write_debt(debt)
+        before = validator.CHECKSUM_DEBT_FILE.read_text()
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            result = validator.main(args)
+        after = validator.CHECKSUM_DEBT_FILE.read_text()
+        return result, before, after, stdout.getvalue() + stderr.getvalue()
+    finally:
+        validator.REPO = old_repo
+        validator.CHECKSUM_DEBT_FILE = old_debt_file
+
+
+def check_integration_rules() -> tuple[int, int]:
+    checks: list[tuple[str, object, object]] = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        old = "recipes/old/recipe.toml"
+        new = "recipes/new/recipe.toml"
+        write_recipe(root / old, '"fixed"')
+        write_recipe(root / new, '""')
+        result, before, after, _ = run_main(root, {old}, ["--update-debt"])
+        checks.append(("updater rejects swapping old debt for new debt", (result, after), (1, before)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        old = "recipes/old/recipe.toml"
+        remaining = "recipes/remaining/recipe.toml"
+        write_recipe(root / old, '"fixed"')
+        write_recipe(root / remaining, '""')
+        result, _, after, _ = run_main(root, {old, remaining}, ["--update-debt"])
+        checks.append((
+            "updater removes resolved debt and preserves unpaid old debt",
+            (result, debt_entries(after)),
+            (0, {remaining}),
+        ))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        new = "recipes/new/recipe.toml"
+        write_recipe(root / new, '""')
+        result, before, after, _ = run_main(root, set(), ["--update-debt"])
+        checks.append(("updater rejects new debt without changing the file", (result, after), (1, before)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        old = "recipes/old/recipe.toml"
+        write_recipe(root / old, '""', "dependecies = []\n")
+        result, before, after, _ = run_main(root, {old}, ["--update-debt"])
+        checks.append(("recipe errors prevent updater writes", (result, after), (1, before)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        old = "recipes/old/recipe.toml"
+        path = root / old
+        write_recipe(path, "123")
+        checks.append((
+            "a non-string checksum remains checksum debt",
+            validator.MISSING_CHECKSUM in validator.validate(path),
+            True,
+        ))
+        result, before, after, _ = run_main(root, {old}, [])
+        checks.append(("non-string checksum does not remove its debt entry", (result, after), (1, before)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        old = "recipes/old/recipe.toml"
+        write_recipe(root / old, '""')
+        result, before, after, _ = run_main(root, {old}, ["--strict", "--update-debt"])
+        checks.append(("strict and update modes cannot be combined", (result, after), (2, before)))
+        result, before, after, _ = run_main(root, {old}, ["--strcit"])
+        checks.append(("unknown arguments fail instead of weakening validation", (result, after), (2, before)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        clean = "recipes/clean/recipe.toml"
+        old = "recipes/old/recipe.toml"
+        new = "recipes/new/recipe.toml"
+        write_recipe(root / clean, '"fixed"')
+        write_recipe(root / old, '""')
+        write_recipe(root / new, '""')
+        result, _, _, output = run_main(root, {old}, [])
+        checks.append((
+            "summary categories stay disjoint",
+            (result, "1 passed, 1 failed, 1 awaiting a checksum  (3 recipes)" in output),
+            (1, True),
+        ))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        expected = {
+            "packages/src/recipe.toml",
+            "src/recipes/foo/recipe.toml",
+            ".stage/recipes/hidden/recipe.toml",
+            "packages/shc/recipe.toml",
+        }
+        for rel in expected:
+            write_recipe(root / rel, '"fixed"')
+        write_recipe(root / "packages/shc/src/vendor/recipe.toml", '"fixed"')
+        write_recipe(root / ".git/fixtures/recipe.toml", '"fixed"')
+
+        old_repo = validator.REPO
+        try:
+            validator.REPO = root
+            discovered = {
+                path.relative_to(root).as_posix()
+                for path in validator.discover_recipes()
+            }
+        finally:
+            validator.REPO = old_repo
+        checks.append(("discovery includes authored trees and excludes build artifacts", discovered, expected))
+
     failed = 0
+    for description, actual, expected in checks:
+        if actual == expected:
+            print(f"ok    {description}")
+        else:
+            failed += 1
+            print(f"FAIL  {description}\n        expected {expected!r}, got {actual!r}")
+    return failed, len(checks)
+
+
+def check_debt_rule() -> int:
+    failed = 0
+    for description, grandfathered, owed, want_violations, want_resolved in DEBT_CASES:
+        violations, resolved = validator.classify_debt(grandfathered, owed)
+        if (violations, resolved) == (want_violations, want_resolved):
+            print(f"ok    {description}")
+        else:
+            failed += 1
+            print(f"FAIL  {description}")
+            print(f"        expected violations={want_violations!r} resolved={want_resolved!r}")
+            print(f"        got      violations={violations!r} resolved={resolved!r}")
+    return failed
+
+
+def main() -> int:
+    failed = check_debt_rule()
+    integration_failed, integration_total = check_integration_rules()
+    failed += integration_failed
     for description, should_pass, toml in CASES:
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "recipe.toml"
@@ -122,7 +330,8 @@ def main() -> int:
             for err in errors:
                 print(f"        {err}")
 
-    print(f"\n{len(CASES) - failed} passed, {failed} failed")
+    total = len(CASES) + len(DEBT_CASES) + integration_total
+    print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
 
