@@ -51,14 +51,17 @@ build = [
 ]
 
 install = [
-    "KVER=$(make -s kernelrelease)",
-    "echo \"Installing kernel release: ${KVER}\"",
-    "mkdir -p $DESTDIR/boot $DESTDIR/usr/lib/modules",
-    "make INSTALL_MOD_PATH=$DESTDIR modules_install",
-    "if [ -d $DESTDIR/lib/modules ] && [ ! -L $DESTDIR/lib ]; then cp -a $DESTDIR/lib/modules $DESTDIR/usr/lib/ && rm -rf $DESTDIR/lib; fi",
-    "rm -f $DESTDIR/usr/lib/modules/$KVER/build $DESTDIR/usr/lib/modules/$KVER/source",
-    "install -Dm644 arch/x86/boot/bzImage $DESTDIR/boot/vmlinuz-${KVER}",
-    "install -Dm644 System.map $DESTDIR/boot/System.map-${KVER}",
-    "install -Dm644 .config $DESTDIR/boot/config-${KVER}",
-    "install -Dm644 arch/x86/boot/bzImage $DESTDIR/usr/lib/modules/$KVER/vmlinuz",
+    """
+    set -e
+    KVER=$(make -s kernelrelease)
+    echo "Installing kernel release: ${KVER}"
+    mkdir -p $DESTDIR/boot $DESTDIR/usr/lib/modules
+    make INSTALL_MOD_PATH=$DESTDIR modules_install
+    if [ -d $DESTDIR/lib/modules ] && [ ! -L $DESTDIR/lib ]; then cp -a $DESTDIR/lib/modules $DESTDIR/usr/lib/ && rm -rf $DESTDIR/lib; fi
+    rm -f $DESTDIR/usr/lib/modules/$KVER/build $DESTDIR/usr/lib/modules/$KVER/source
+    install -Dm644 arch/x86/boot/bzImage $DESTDIR/boot/vmlinuz-${KVER}
+    install -Dm644 System.map $DESTDIR/boot/System.map-${KVER}
+    install -Dm644 .config $DESTDIR/boot/config-${KVER}
+    install -Dm644 arch/x86/boot/bzImage $DESTDIR/usr/lib/modules/$KVER/vmlinuz
+    """
 ]
