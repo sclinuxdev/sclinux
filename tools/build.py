@@ -665,6 +665,17 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         archive.unlink()
 
 
+def validate_stage1_package_paths(
+    recipe_dir: Path, forbidden_roots: list[Path]
+) -> None:
+    package_root = recipe_dir / "pkg"
+    for root in forbidden_roots:
+        relative = Path(*root.resolve().parts[1:])
+        leaked = package_root / relative
+        if leaked.exists():
+            raise ConfigError(f"Stage1 package payload contains a build path: {leaked}")
+
+
 def validate_stage1_package_shebangs(recipe_dir: Path, forbidden_roots: list[Path]) -> None:
     package_root = recipe_dir / "pkg"
     forbidden = {
@@ -798,6 +809,7 @@ def run_stage1_packages(
             )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ConfigError(f"Stage1 package build failed: {name}: {exc}") from exc
+        validate_stage1_package_paths(recipe_path.parent, [workspace, sysroot])
         validate_stage1_package_shebangs(recipe_path.parent, [workspace, sysroot])
         entry = stage1_package_entry(name, recipe_path, architecture)
         if entry is None:

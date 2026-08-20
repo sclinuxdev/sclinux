@@ -281,6 +281,17 @@ def main() -> int:
             "arch" in canonical["package"],
             False,
         )
+        flit_core = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "flit-core" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 flit-core installs directly below the package root",
+            "$DESTDIR/usr/lib/python3.14/site-packages"
+            in " ".join(flit_core["source"]["install"])
+            and "bootstrap_install.py"
+            not in " ".join(flit_core["source"]["install"]),
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -529,6 +540,28 @@ def main() -> int:
             True,
         )
 
+        leaking_payload = (
+            fixture_recipe.parent
+            / "pkg"
+            / Path(*sysroot_library.parents[1].resolve().parts[1:])
+            / "usr/lib/leak"
+        )
+        leaking_payload.parent.mkdir(parents=True)
+        leaking_payload.write_text("fixture")
+        try:
+            build.validate_stage1_package_paths(
+                fixture_recipe.parent, [sysroot_library.parents[1]]
+            )
+        except build.ConfigError as exc:
+            payload_error = str(exc)
+        else:
+            payload_error = "no error"
+        failed += not check(
+            "Stage1 rejects payloads nested below a temporary build path",
+            "payload contains a build path" in payload_error,
+            True,
+        )
+
         (cache / digest).write_bytes(b"corrupt")
         try:
             build.fetch_stage1_sources([fixture_source], cache, [], offline=True)
@@ -615,7 +648,7 @@ def main() -> int:
         [],
     )
 
-    total = 57
+    total = 61
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
