@@ -393,6 +393,7 @@ def main() -> int:
         (perl_root / "CORE").mkdir(parents=True)
         autoconf_modules = sysroot_library.parent / "share/autoconf"
         autoconf_modules.mkdir(parents=True)
+        (sysroot_binary.parent / "autom4te").write_text("#!/bin/sh\n")
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
         )
@@ -427,6 +428,11 @@ def main() -> int:
             "Stage1 scripts locate Autoconf modules inside the isolated sysroot",
             interpreter_environment["autom4te_perllibdir"],
             str(autoconf_modules),
+        )
+        failed += not check(
+            "Stage1 Autotools scripts call sibling tools inside the isolated sysroot",
+            interpreter_environment["AUTOM4TE"],
+            str(sysroot_binary.parent / "autom4te"),
         )
 
         leaking_script = fixture_recipe.parent / "pkg/usr/bin/leak"

@@ -561,6 +561,16 @@ def stage1_build_environment(
         autoconf_modules = usr / "share/autoconf"
         if autoconf_modules.is_dir():
             environment["autom4te_perllibdir"] = str(autoconf_modules)
+        for variable, command in (
+            ("AUTOM4TE", "autom4te"),
+            ("AUTOCONF", "autoconf"),
+            ("AUTOHEADER", "autoheader"),
+            ("AUTOMAKE", "automake"),
+            ("ACLOCAL", "aclocal"),
+        ):
+            executable = usr / "bin" / command
+            if executable.is_file():
+                environment[variable] = str(executable)
         prepend_environment(
             environment,
             "CPPFLAGS",
