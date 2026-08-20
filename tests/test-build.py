@@ -292,6 +292,14 @@ def main() -> int:
             not in " ".join(flit_core["source"]["install"]),
             True,
         )
+        libelf = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "libelf" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 libelf keeps format diagnostics non-fatal with new glibc headers",
+            "-Wno-error=format-nonliteral" in libelf["source"]["build"][0],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -648,7 +656,7 @@ def main() -> int:
         [],
     )
 
-    total = 61
+    total = 62
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
