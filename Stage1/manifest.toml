@@ -1,7 +1,7 @@
 # Sage Linux Stage 1 构建清单（全量重建，不继承）
 # - 顺序 = 依赖拓扑排序（recipe 的 dependencies + build_dependencies 自动生成，
 #   重放：python3 stage1/scripts/gen-order.py --write）；batch 字段仅为设计分组标记。
-# - 所有 108 个包 action = "build"：stage1 在 stage0 chroot（/mnt）内全量重建。
+# - 所有 120 个包 action = "build"：stage1 在 stage0 chroot（/mnt）内全量重建。
 # - 默认只构建不安装（STAGE1_INSTALL=1 时逐包安装进构建 chroot 供后续构建依赖）。
 schema_version = 1
 stage = 1
@@ -519,10 +519,67 @@ batch = "E"
 action = "build"
 
 [[packages]]
+name = "python-pyelftools"
+batch = "F"
+action = "build"
+note = "systemd-boot 的 elf2efi 构建依赖"
+
+[[packages]]
 name = "systemd"
 batch = "F"
 action = "build"
 note = "提供 virtual/init + virtual/udev；须在 dbus 之前"
+
+[[packages]]
+name = "libaio"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "lvm2"
+batch = "F"
+action = "build"
+note = "合并提供 device-mapper 与 LVM2 用户态"
+
+[[packages]]
+name = "libinih"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "liburcu"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "xfsprogs"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "dosfstools"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "popt"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "gptfdisk"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "efivar"
+batch = "F"
+action = "build"
+
+[[packages]]
+name = "efibootmgr"
+batch = "F"
+action = "build"
 
 [[packages]]
 name = "dbus"
@@ -560,7 +617,13 @@ batch = "F"
 action = "build"
 
 [[packages]]
+name = "sclinux-boot"
+batch = "F"
+action = "build"
+note = "生成 initramfs、ESP 默认引导器与 loader entry"
+
+[[packages]]
 name = "base"
 batch = "F"
 action = "build"
-note = "2.0.0 元包，依赖全部 106 包"
+note = "2.0.0 元包，依赖全部 119 个基础包"

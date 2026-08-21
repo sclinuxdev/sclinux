@@ -56,6 +56,16 @@ def main() -> int:
         "BOOTX64.EFI",
     )
     failed += not check(
+        "architectures select distinct systemd-boot EFI binaries",
+        {values["systemd_boot_efi"] for values in architectures.values()},
+        {"systemd-bootx64.efi", "systemd-bootaa64.efi"},
+    )
+    failed += not check(
+        "architectures select their QEMU serial consoles",
+        {values["kernel_console"] for values in architectures.values()},
+        {"ttyS0,115200", "ttyAMA0,115200"},
+    )
+    failed += not check(
         "architectures map to distinct OCI platforms",
         {values["oci_platform"] for values in architectures.values()},
         {"linux/amd64", "linux/arm64"},
@@ -69,7 +79,8 @@ def main() -> int:
         "missing architecture fields are rejected",
         config_error("schema_version = 1\n[architectures.aarch64]\ngnu_triplet = \"a\"\n"),
         "[architectures.aarch64] missing field(s): dynamic_linker, efi_boot_name, "
-        "kernel_arch, kernel_image, oci_platform, qemu_machine, qemu_system",
+        "kernel_arch, kernel_console, kernel_image, oci_platform, qemu_machine, "
+        "qemu_system, systemd_boot_efi",
     )
 
     result = subprocess.run(
@@ -229,7 +240,7 @@ def main() -> int:
     failed += not check(
         "Stage1 manifest covers every canonical recipe",
         len(stage1_packages),
-        108,
+        120,
     )
     failed += not check(
         "Stage1 builds libunistring before the gettext tools that load it",
@@ -245,12 +256,12 @@ def main() -> int:
     failed += not check(
         "Stage1 source lock deduplicates canonical URLs",
         len(stage1_sources),
-        91,
+        102,
     )
     failed += not check(
         "Stage1 source lock retains every package reference",
         sum(len(source["packages"]) for source in stage1_sources),
-        104,
+        115,
     )
     rewrites = build.parse_url_rewrites(
         ["https://github.com/=https://mirror.invalid/https://github.com/"]
@@ -388,6 +399,19 @@ def main() -> int:
             ),
             True,
         )
+        failed += not check(
+            "Stage1 systemd keeps D-Bus install paths outside the build sysroot",
+            all(
+                option in systemd["source"]["build"][1]
+                for option in (
+                    "-D dbuspolicydir=/usr/share/dbus-1/system.d",
+                    "-D dbussessionservicedir=/usr/share/dbus-1/services",
+                    "-D dbussystemservicedir=/usr/share/dbus-1/system-services",
+                    "-D dbus-interfaces-dir=/usr/share/dbus-1/interfaces",
+                )
+            ),
+            True,
+        )
         dbus = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "dbus" / "recipe.toml").read_text()
         )
@@ -470,6 +494,7 @@ def main() -> int:
             "Stage1 mkinitcpio installs and records only target runtime paths",
             "--libdir=lib" in mkinitcpio["source"]["build"][0]
             and "stage1-runtime-paths.patch" in mkinitcpio["source"]["prepare"][0]
+            and "lvm2-runtime-tools.patch" in mkinitcpio["source"]["prepare"][1]
             and "systemd_system_unit_dir = '/usr/lib/systemd/system'"
             in mkinitcpio_paths
             and "tmpfiles_dir = '/usr/lib/tmpfiles.d'" in mkinitcpio_paths
@@ -477,6 +502,77 @@ def main() -> int:
             in mkinitcpio_paths
             and "conf_data.set('TMPFILES_PATH', '/usr/bin/systemd-tmpfiles')"
             in mkinitcpio_paths,
+            True,
+        )
+        mkinitcpio_lvm = (
+            REPO
+            / "Stage1"
+            / "recipes"
+            / "mkinitcpio"
+            / "lvm2-runtime-tools.patch"
+        ).read_text()
+        failed += not check(
+            "Stage1 mkinitcpio includes LVM userspace without requiring pdata_tools",
+            "if command -v pdata_tools" in mkinitcpio_lvm
+            and "map add_binary lvm dmsetup" in mkinitcpio_lvm,
+            True,
+        )
+        lvm2 = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "lvm2" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 LVM does not advertise absent metadata tools",
+            all(
+                f"--with-{kind}-{tool}=" in lvm2["source"]["build"][0]
+                for kind in ("thin", "cache")
+                for tool in ("check", "dump", "repair", "restore")
+            ),
+            True,
+        )
+        systemd = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "systemd" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 systemd builds architecture-matched EFI boot artifacts",
+            "python-pyelftools >= 0.33" in systemd["source"]["dependencies"]
+            and "-D efi=true" in " ".join(systemd["source"]["build"])
+            and "-D bootloader=enabled" in " ".join(systemd["source"]["build"])
+            and "-D sbat-distro=sclinux" in " ".join(systemd["source"]["build"]),
+            True,
+        )
+        xfsprogs = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "xfsprogs" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 xfsprogs keeps udev rules outside the build sysroot",
+            "--with-udev-rule-dir=/usr/lib/udev/rules.d"
+            in xfsprogs["source"]["build"][1]
+            and "--disable-lib64" in xfsprogs["source"]["build"][1]
+            and "so:libhandle.so.1" in xfsprogs["source"]["provides"]
+            and "so:libxfs.so.0" not in xfsprogs["source"]["provides"],
+            True,
+        )
+        efivar = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "efivar" / "recipe.toml").read_text()
+        )
+        efivar_runner = (
+            REPO / "Stage1" / "recipes" / "efivar" / "target-runner.patch"
+        ).read_text()
+        failed += not check(
+            "Stage1 efivar runs generated tools with the target runtime",
+            "target-runner.patch" in efivar["source"]["prepare"][0]
+            and "SC_TARGET_RUNNER=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            in efivar["source"]["build"][0]
+            and "$(SC_TARGET_RUNNER) ./makeguids" in efivar_runner,
+            True,
+        )
+        efibootmgr = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "efibootmgr" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 efibootmgr avoids an unwrapped LTO compiler subprocess",
+            "CFLAGS='-O2 -g'" in efibootmgr["source"]["build"][0]
+            and "-flto" not in efibootmgr["source"]["build"][0],
             True,
         )
         cmake = build.tomllib.loads(
@@ -523,7 +619,7 @@ def main() -> int:
         failed += not check(
             "Stage1 renderer emits every manifest package",
             len(all_rendered),
-            108,
+            120,
         )
         failed += not check(
             "Stage1 renderer assigns one target architecture to every package",
@@ -532,6 +628,23 @@ def main() -> int:
                 for path in all_rendered
             },
             {"aarch64"},
+        )
+        build.validate_rendered_stage1_recipes(
+            build.resolve_architecture("aarch64"), all_output
+        )
+        stale_recipe = all_output / "lvm2" / "recipe.toml"
+        stale_recipe.write_text(stale_recipe.read_text() + "# stale\n")
+        try:
+            build.validate_rendered_stage1_recipes(
+                build.resolve_architecture("aarch64"), all_output
+            )
+            stale_error = "no error"
+        except build.ConfigError as exc:
+            stale_error = str(exc)
+        failed += not check(
+            "Stage1 run rejects stale rendered inputs",
+            "lvm2/recipe.toml" in stale_error and "stage1-recipes" in stale_error,
+            True,
         )
 
         cache = Path(directory) / "sources"
@@ -684,6 +797,7 @@ def main() -> int:
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
         (sysroot_binary.parent / "perl").symlink_to("pkgconf")
         (sysroot_binary.parent / "cmake").symlink_to("pkgconf")
+        (sysroot_binary.parent / "make").symlink_to("pkgconf")
         cmake_modules = sysroot_library.parent / "share/cmake-3.31"
         cmake_modules.mkdir(parents=True)
         gcc_binary = (
@@ -724,7 +838,12 @@ def main() -> int:
         failed += not check(
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
-            ["cmake", "perl", "pkg-config", "pkgconf"],
+            ["cmake", "gmake", "make", "perl", "pkg-config", "pkgconf"],
+        )
+        failed += not check(
+            "Stage1 keeps gmake on the same target runtime as make",
+            (wrapper_root / "gmake").resolve(),
+            (wrapper_root / "make").resolve(),
         )
         failed += not check(
             "Stage1 exposes the locked xmake channel through a target wrapper",
@@ -920,6 +1039,27 @@ def main() -> int:
         failed += not check(
             "Stage1 renderer selects the x86 kernel image",
             "arch/x86/boot/bzImage" in x86_linux_text,
+            True,
+        )
+
+        boot_output = Path(directory) / "sclinux-boot" / "recipe.toml"
+        build.render_stage1_recipe(
+            "sclinux-boot", build.resolve_architecture("aarch64"), boot_output
+        )
+        boot_text = boot_output.read_text()
+        failed += not check(
+            "Stage1 boot integration selects AArch64 EFI and serial paths",
+            "systemd-bootaa64.efi" in boot_text
+            and "BOOTAA64.EFI" in boot_text
+            and "ttyAMA0,115200" in boot_text
+            and "HOOKS=(systemd modconf block lvm2 filesystems fsck)" in boot_text
+            and "autodetect" not in boot_text,
+            True,
+        )
+        failed += not check(
+            "Stage1 renderer copies boot integration helpers",
+            (boot_output.parent / "sclinux-update-boot.in").is_file()
+            and (boot_output.parent / "90-sclinux-boot.install").is_file(),
             True,
         )
 

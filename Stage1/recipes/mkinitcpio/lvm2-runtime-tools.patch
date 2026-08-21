@@ -1,0 +1,15 @@
+--- a/install/lvm2
++++ b/install/lvm2
+@@ -17,4 +17,8 @@ build() {
+-    add_binary 'pdata_tools'
+-    while IFS='' read -r -d '' symlink; do
+-        add_symlink "$symlink"
+-    done < <(LC_ALL=C.UTF-8 find -L /usr/bin/ -samefile "$(type -P pdata_tools)" -xtype l -print0)
++    if command -v pdata_tools &>/dev/null; then
++        add_binary 'pdata_tools'
++        while IFS='' read -r -d '' symlink; do
++            add_symlink "$symlink"
++        done < <(LC_ALL=C.UTF-8 find -L /usr/bin/ -samefile "$(type -P pdata_tools)" -xtype l -print0)
++    fi
++
++    map add_binary lvm dmsetup

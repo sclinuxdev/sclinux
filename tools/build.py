@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -37,6 +38,8 @@ ARCH_FIELDS = (
     "kernel_arch",
     "kernel_image",
     "efi_boot_name",
+    "systemd_boot_efi",
+    "kernel_console",
     "dynamic_linker",
     "qemu_system",
     "qemu_machine",
@@ -327,6 +330,29 @@ def render_stage1_recipes(
         render_stage1_recipe(name, architecture, output / name / "recipe.toml")
         for name in names
     ]
+
+
+def validate_rendered_stage1_recipes(
+    architecture: dict[str, str], recipes: Path, manifest: Path = DEFAULT_MANIFEST
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="sclinux-stage1-render-") as directory:
+        expected_root = Path(directory)
+        render_stage1_recipes(architecture, expected_root, manifest)
+        stale = []
+        for expected in expected_root.rglob("*"):
+            if not expected.is_file():
+                continue
+            relative = expected.relative_to(expected_root)
+            observed = recipes / relative
+            if not observed.is_file() or observed.read_bytes() != expected.read_bytes():
+                stale.append(str(relative))
+        if stale:
+            preview = ", ".join(stale[:5])
+            if len(stale) > 5:
+                preview += f", and {len(stale) - 5} more"
+            raise ConfigError(
+                f"rendered Stage1 inputs are stale: {preview}; run stage1-recipes again"
+            )
 
 
 def collect_stage1_sources(manifest: Path = DEFAULT_MANIFEST) -> list[dict]:
@@ -800,6 +826,10 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     gcc_ld = wrapper_root / "gcc-bin/ld"
     if gcc_ld.is_file():
         (gcc_ld.parent / "ld.lld").symlink_to(gcc_ld.name)
+    make = wrapper_root / "usr/bin/make"
+    gmake = wrapper_root / "usr/bin/gmake"
+    if make.is_file() and not gmake.exists():
+        gmake.symlink_to(make.name)
     cmake_share = sysroot / "usr/share"
     if (sysroot / "usr/bin/cmake").is_file() and cmake_share.is_dir():
         wrapper_share = wrapper_root / "usr/share"
@@ -835,6 +865,7 @@ def run_stage1_packages(
     manifest = load_stage1_manifest()
     packages = select_stage1_packages(manifest, first, last)
     recipes = workspace / "recipes"
+    validate_rendered_stage1_recipes(architecture, recipes)
     sources = workspace / "sources"
     locked_by_name = {}
     for name in manifest:

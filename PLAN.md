@@ -210,13 +210,39 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | 阶段 | 状态 |
 | --- | --- |
 | 基线同步与仓库审计 | 已完成 |
-| A：构建契约与输入 | 进行中（源码摘要已锁定） |
-| B：Stage0 与统一入口 | 进行中（Stage0、源码抓取、全量配方渲染已落地） |
-| C：配方双架构参数化 | 进行中（Sage、GMP、Linux 已参数化） |
-| D：可启动系统包集 | 未开始 |
+| A：构建契约与输入 | 已完成 |
+| B：Stage0 与统一入口 | 已完成 |
+| C：配方双架构参数化 | 已完成 |
+| D：可启动系统包集 | 进行中（x86_64 Stage1 已完成 120/120，包归档已核对；待 rootfs 中生成并检查真实 initramfs） |
 | E：rootfs/qcow2 组装 | 未开始 |
 | F：x86_64 验证 | 未开始 |
 | G：aarch64 验证 | 未开始 |
 | H：文档、CI 与交付 | 未开始 |
 
 每完成一个阶段，应在本表更新状态，并保留对应提交和可复查的测试结果。
+
+## 8. 实施问题记录
+
+这里记录实施过程中实际遇到的问题、处理状态和上游跟踪；它是计划执行记录，不是 CHANGELOG。
+
+| 问题 | 影响与根因 | 处理与验证 | 状态 / 上游 |
+| --- | --- | --- | --- |
+| 本机缺少可用 Docker daemon，磁盘余量也不足以同时保留双架构全量构建 | 无法在 macOS 本机高效完成 x86_64 Stage1；x86_64 还会退化到 TCG | 使用独立 x86_64 Linux 构建机完成原生全量构建，本机只跑快速静态测试 | 已规避；最终验收仍需回到统一入口重放 |
+| 国内环境访问部分上游慢或不稳定 | 固定源码偶发下载失败，直接改 URL 又会破坏源码身份 | `fetch` 支持传输层 URL 前缀重写，缓存按内容 SHA-256 寻址并在离线模式复验 | 已修复 |
+| macOS 自带旧版 rsync 不支持 `--info=stats2` | 首次向构建机同步新增源码缓存时，命令在传输前退出 | 改用兼容的 `--stats`；随后 11 个文件一次同步并在远端按内容哈希复验 | 已规避；不属于项目或上游缺陷 |
+| 目标程序验收命令曾把临时 wrapper 错认在 workspace 根目录 | 实际 wrapper 位于 build sysroot，首次 LVM 配置查询找不到文件 | 改为显式使用 Stage1 动态加载器和库目录执行目标 ELF；不再依赖错误路径假设 | 已纠正；不属于项目或上游缺陷 |
+| Stage1 目标 ELF 在 Stage0 宿主中直接执行失败 | 两套 glibc/动态加载器不同；CMake、Coreutils、Bison、Linux host tools 等会在构建时执行刚生成的目标程序 | 统一生成目标加载器 wrapper，显式传入目标库搜索路径与 link-time `rpath-link`；x86_64 原 108 包全量及新增 12 包增量构建通过 | 已修复 |
+| 构建系统把 sysroot 或工作目录写进最终包 | Meson/CMake 安装路径及部分生成文件使用了构建期绝对路径 | 修正 systemd、dbus、man-db、mkinitcpio、CMake 等配方和补丁；包归档扫描未发现构建根泄漏 | 已修复 |
+| Linux 内核 `objtool` 及其库由目标工具链生成，宿主不能直接运行 | 内核构建在 objtool 阶段中断 | 为内核 host tools 写入 Stage1 解释器/RPATH，并只在 objtool 调用点使用目标运行器；x86_64 内核及 6,440 个模块构建通过 | 已修复 |
+| Sage 归档遍历顺序不稳定，且 USTAR 头使用 GNU magic 与 POSIX prefix 语义混搭 | 同源码可能生成不同包哈希，长路径也可能被标准 tar 误解 | 本仓库先带固定补丁；Sage 上游 PR 增加稳定排序、POSIX USTAR 头和双创建顺序回归测试 | 已修复；[Sage PR #7](https://github.com/antinomie1/sage/pull/7) |
+| Sage 修复在 GCC 15.3 通过、在 GitHub Actions 的 GCC 16 C++ Modules 下出现迭代器 ABI mangling 冲突 | GCC 16 的 Modules 实现会在排序 `vector<directory_entry>` 时重复实例化冲突符号 | 改为按相对路径键控的有序映射；GCC 15.3 测试 11/11、GCC 16 Actions 均通过 | 已修复；包含在 [Sage PR #7](https://github.com/antinomie1/sage/pull/7) |
+| systemd 包有 `bootctl`，但没有 systemd-boot EFI 文件 | 当前配方未启用 `efi`/`bootloader`，且缺少构建所需的 pyelftools | 增加固定源码的 pyelftools，并显式启用 EFI/bootloader 与 sclinux SBAT 元数据；x86_64 包已核对 `systemd-bootx64.efi` | 已修复；aarch64 对应文件待该架构构建复验 |
+| systemd 从 Stage1 的 `dbus-1.pc` 读到带 sysroot 的绝对安装目录 | EFI 版 systemd 首次重建成功后，包路径审计发现 `pkg/root/.../build-sysroot/usr/share/dbus-1/services` | 显式固定 policy、session、system-service 与 interfaces 四个 D-Bus 目录，并增加回归测试；重建包路径正常 | 已修复；属于本仓库配方问题 |
+| xfsprogs 选中宿主 GNU Make 4.3，无法继承 Stage1 GNU Make 4.4 的 FIFO jobserver | configure 优先查找 `gmake`，Stage1 wrapper 仅提供 `make`，于是回退到宿主 `/usr/bin/gmake` | 为 Stage1 make wrapper 提供同运行时的 `gmake` 别名；同时固定 XFS udev 规则目录，避免 pkg-config sysroot 路径进入包 | 已修复；属于本仓库构建隔离问题 |
+| xfsprogs 首个成功包把 libhandle 安装到 x86 专用 `/usr/lib64`，并错误声明不存在的 `libxfs.so.0` | 上游默认启用 lib64 suffix；libxfs 是内部静态库，不是已安装共享 ABI | 禁用 lib64 suffix，统一安装到 `/usr/lib`，capability 改为实际存在的 `libhandle.so.1`；重建包内容与声明一致 | 已修复；属于本仓库配方问题 |
+| efivar 构建时直接运行目标 ELF `makeguids` | 目标程序需要 Stage1 glibc 2.44，Ubuntu 宿主 glibc 版本较旧 | 通过固定补丁让 makeguids 使用架构对应动态加载器和 Stage1 库路径执行 | 已修复；x86_64 重建通过 |
+| efibootmgr 默认 `-flto` 导致 lto-wrapper 绕过 GCC wrapper | LTO 子进程直接启动 Stage1 原始 GCC，再次落到宿主 glibc | 此小工具不依赖 LTO 语义，配方显式使用 `-O2 -g` 关闭 LTO并保留正常优化 | 已修复；x86_64 重建通过 |
+| LVM2 在缺少 cache/thin 元数据工具时仍推断出不存在的 `/usr/sbin/cache_*` 路径 | 运行时配置会声称存在未打包的检查和修复工具；thin 路径已留空但 cache 路径未固定 | 配方显式把两类外部工具的 check、dump、repair、restore 路径全部留空；目标 ELF 配置查询已确认八个路径为空 | 配置已修复；真实 LVM thin 激活待启动验收 |
+| `stage1-run` 直接读取旧的 rendered recipe，canonical recipe 更新后仍可能成功打出旧 release | 增量重建不会自动刷新工作区，退出码无法证明新配方已经进入产物 | 运行前逐文件比较 canonical 渲染结果与工作区 recipe/helper；不一致时拒绝构建并提示重跑 `stage1-recipes` | 已修复；属于本仓库增量构建正确性问题 |
+| 交付 initramfs 使用 `autodetect` 会按云构建机硬件裁剪驱动 | 产物可能漏掉 UTM/QEMU 所需的 IDE、virtio 或架构特定存储模块，构建成功仍无法挂载根卷 | 交付配置移除 `autodetect`，由 `block`、`lvm2`、`filesystems` hook 收入可移植模块集；真实内容待 rootfs 阶段检查 | 已修复配置；待 initramfs 与双虚拟机启动复验 |
+| mkinitcpio 已带 LVM2 hook，但基础包集此前缺少 LVM2 与 XFS 用户态工具 | 无法生成可激活 XFS-on-LVM-thin 根卷的 initramfs | 已补齐 LVM2、XFS 与镜像工具配方，x86_64 锁文件为 120 个唯一包；继续以 initramfs 内容检查和真实启动验证收口 | 包闭包已修复；真实 initramfs 待 rootfs 阶段验证 |
