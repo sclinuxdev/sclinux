@@ -374,6 +374,20 @@ def main() -> int:
             "--libdir=lib" in kmod["source"]["build"][1],
             True,
         )
+        systemd = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "systemd" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 systemd preserves its compatibility headers and shared libdir",
+            "--libdir=lib" in systemd["source"]["build"][1]
+            and all(
+                "env -u CPATH CPPFLAGS=" in command
+                and 'C_INCLUDE_PATH="$SC_BUILD_SYSROOT/usr/include"' in command
+                for command in systemd["source"]["build"][1:]
+                + systemd["source"]["install"][:1]
+            ),
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -730,7 +744,7 @@ def main() -> int:
         [],
     )
 
-    total = 71
+    total = 72
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
