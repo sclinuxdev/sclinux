@@ -352,6 +352,15 @@ def main() -> int:
             "--disable-tests" in kbd["source"]["build"][0],
             True,
         )
+        shadow = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "shadow" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 shadow uses POSIX-shell-compatible crypt options",
+            "--with-bcrypt --with-yescrypt" in shadow["source"]["build"][1]
+            and "--with-{b,yes}crypt" not in shadow["source"]["build"][1],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -708,7 +717,7 @@ def main() -> int:
         [],
     )
 
-    total = 68
+    total = 69
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

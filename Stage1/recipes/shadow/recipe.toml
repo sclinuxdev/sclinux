@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "shadow"
 version = "4.20.2"
-release = "1"
+release = "2"
 description = "Password and account management utilities (passwd, useradd, login, su, ...)"
 license = "BSD-3-Clause"
 channel = "system"
@@ -30,7 +30,7 @@ prepare = [
 
 build = [
     "touch /usr/bin/passwd 2>/dev/null || true",
-    "./configure --sysconfdir=/etc --disable-static --with-{b,yes}crypt --without-libbsd --disable-logind --with-group-name-max-length=32",
+    "./configure --sysconfdir=/etc --disable-static --with-bcrypt --with-yescrypt --without-libbsd --disable-logind --with-group-name-max-length=32",
     "make -j$(nproc)",
 ]
 
