@@ -411,6 +411,43 @@ def main() -> int:
             in man_db["source"]["build"][0],
             True,
         )
+        bzip2_libs = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "bzip2-libs" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 bzip2-libs installs every declared shared-library ABI name",
+            "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so.1.0"
+            in bzip2_libs["source"]["install"],
+            True,
+        )
+        failed += not check(
+            "Stage1 bzip2-libs links through the isolated sysroot",
+            "$(CC) $(LDFLAGS) -shared" in bzip2_libs["source"]["prepare"][0]
+            and "$(CC) $(CFLAGS) $(LDFLAGS) -o bzip2-shared"
+            in bzip2_libs["source"]["prepare"][1]
+            and bzip2_libs["source"]["build"][-1]
+            == "make -j$(nproc) libbz2.a",
+            True,
+        )
+        cmake = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "cmake" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 CMake runs its temporary bootstrap binary with the target loader",
+            "run-bootstrap-cmake.sh @SC_DYNAMIC_LINKER@"
+            in cmake["source"]["prepare"][1]
+            and "--library-path"
+            in (
+                REPO / "Stage1" / "recipes" / "cmake" / "run-bootstrap-cmake.sh"
+            ).read_text(),
+            True,
+        )
+        failed += not check(
+            "Stage1 CMake installs its final ELF through the target loader",
+            "run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ bin/cmake -P"
+            in cmake["source"]["install"][0],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -548,6 +585,7 @@ def main() -> int:
         sysroot_binary.chmod(0o755)
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
         (sysroot_binary.parent / "perl").symlink_to("pkgconf")
+        (sysroot_binary.parent / "cmake").symlink_to("pkgconf")
         xmake_binary = (
             sysroot_library.parents[1] / "opt/channels/xmake/3/bin/xmake"
         )
@@ -566,7 +604,7 @@ def main() -> int:
         failed += not check(
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
-            ["perl", "pkg-config", "pkgconf"],
+            ["cmake", "perl", "pkg-config", "pkgconf"],
         )
         failed += not check(
             "Stage1 exposes the locked xmake channel through a target wrapper",
@@ -577,6 +615,12 @@ def main() -> int:
         failed += not check(
             "Stage1 xmake wrapper preserves its installed module root",
             f"--argv0 {xmake_binary} " in xmake_wrapper,
+            True,
+        )
+        failed += not check(
+            "Stage1 CMake wrapper preserves its installed module root",
+            f"--argv0 {sysroot_binary.parent / 'cmake'} "
+            in (wrapper_root / "cmake").read_text(),
             True,
         )
         wrapper = (wrapper_root / "pkgconf").read_text()
@@ -767,7 +811,7 @@ def main() -> int:
         [],
     )
 
-    total = 74
+    total = 79
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "cmake"
 version = "3.31.6"
-release = "1"
+release = "2"
 description = "Cross-platform open-source build system"
 license = "BSD-3-Clause"
 channel = "system"
@@ -35,6 +35,8 @@ provides = [
 ]
 
 prepare = [
+    "chmod +x ../run-bootstrap-cmake.sh",
+    "sed -i 's#^\"${cmake_bootstrap_dir}/cmake\" #../run-bootstrap-cmake.sh @SC_DYNAMIC_LINKER@ \"${cmake_bootstrap_dir}/cmake\" #' bootstrap",
 ]
 
 build = [
@@ -43,5 +45,5 @@ build = [
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    "DESTDIR=\"$DESTDIR\" ../run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ bin/cmake -P cmake_install.cmake",
 ]

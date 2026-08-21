@@ -738,7 +738,10 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                     f" -I{shlex.quote(str(path))}" for path in stage1_perl_module_paths(sysroot)
                 )
             argv0 = (
-                shlex.quote(str(executable)) if wrapper_name == "xmake-bin" else '"$0"'
+                shlex.quote(str(executable))
+                if wrapper_name == "xmake-bin"
+                or executable.name in {"cmake", "ccmake", "cpack", "ctest"}
+                else '"$0"'
             )
             wrapper.write_text(
                 "#!/bin/sh\n"
