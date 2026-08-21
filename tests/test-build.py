@@ -326,6 +326,15 @@ def main() -> int:
             "fastjsonschema_*.py" in setuptools_recipe["source"]["install"][2],
             True,
         )
+        inetutils = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "inetutils" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 inetutils does not probe the build host procfs path",
+            "inetutils_cv_path_procnet_dev=/proc/net/dev"
+            in inetutils["source"]["build"][0],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -682,7 +691,7 @@ def main() -> int:
         [],
     )
 
-    total = 65
+    total = 66
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
