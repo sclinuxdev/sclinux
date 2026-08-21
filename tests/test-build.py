@@ -429,6 +429,56 @@ def main() -> int:
             == "make -j$(nproc) libbz2.a",
             True,
         )
+        bison = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "bison" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 Bison resolves build tools through the target runtime",
+            bison["source"]["build"][0].startswith("M4=m4 ./configure ")
+            and "PREBISON=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            in bison["source"]["build"][1]
+            and "PREBISON=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            in bison["source"]["install"][0],
+            True,
+        )
+        coreutils = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "coreutils" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 coreutils hashes do not retain the seed OpenSSL ABI",
+            "--without-openssl" in coreutils["source"]["build"][0]
+            and "$ENV{SC_TARGET_RUNNER}" in coreutils["source"]["prepare"][0]
+            and "SC_TARGET_RUNNER=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            in coreutils["source"]["build"][1]
+            and "SC_TARGET_RUNNER=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            in coreutils["source"]["install"][0]
+            and "cu_install_program=install"
+            in coreutils["source"]["install"][0],
+            True,
+        )
+        mkinitcpio = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "mkinitcpio" / "recipe.toml").read_text()
+        )
+        mkinitcpio_paths = (
+            REPO
+            / "Stage1"
+            / "recipes"
+            / "mkinitcpio"
+            / "stage1-runtime-paths.patch"
+        ).read_text()
+        failed += not check(
+            "Stage1 mkinitcpio installs and records only target runtime paths",
+            "--libdir=lib" in mkinitcpio["source"]["build"][0]
+            and "stage1-runtime-paths.patch" in mkinitcpio["source"]["prepare"][0]
+            and "systemd_system_unit_dir = '/usr/lib/systemd/system'"
+            in mkinitcpio_paths
+            and "tmpfiles_dir = '/usr/lib/tmpfiles.d'" in mkinitcpio_paths
+            and "conf_data.set('UDEVD_PATH', '/usr/lib/systemd/systemd-udevd')"
+            in mkinitcpio_paths
+            and "conf_data.set('TMPFILES_PATH', '/usr/bin/systemd-tmpfiles')"
+            in mkinitcpio_paths,
+            True,
+        )
         cmake = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "cmake" / "recipe.toml").read_text()
         )
@@ -446,6 +496,23 @@ def main() -> int:
             "Stage1 CMake installs its final ELF through the target loader",
             "run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ bin/cmake -P"
             in cmake["source"]["install"][0],
+            True,
+        )
+        linux_zen = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "linux-zen" / "recipe.toml").read_text()
+        )
+        kernel_runner = (
+            REPO / "Stage1" / "recipes" / "linux-zen" / "make-stage1-kernel.sh"
+        ).read_text()
+        failed += not check(
+            "Stage1 kernel host tools run with their target runtime closure",
+            "make-stage1-kernel.sh @SC_DYNAMIC_LINKER@"
+            in linux_zen["source"]["build"][0]
+            and "$(SC_TARGET_RUNNER) $(objtool)"
+            in linux_zen["source"]["prepare"][2]
+            and "--dynamic-linker,$loader" in kernel_runner
+            and "--disable-new-dtags,-rpath,$library_path" in kernel_runner
+            and 'SC_TARGET_RUNNER="$target_runner"' in kernel_runner,
             True,
         )
 
@@ -568,6 +635,37 @@ def main() -> int:
             digest,
         )
 
+        meta_recipe = Path(directory) / "meta" / "recipe.toml"
+        meta_recipe.parent.mkdir()
+        meta_recipe.write_text(
+            "[package]\n"
+            'name = "meta"\n'
+            'version = "1.0"\n'
+            'arch = "aarch64"\n\n'
+            'dependencies = ["fixture"]\n\n'
+            "prepare = []\n"
+            "build = []\n"
+            "install = []\n"
+        )
+        meta_artifact = meta_recipe.parent / "meta-1.0-1-aarch64.pkg.tar.zst"
+        meta_artifact.write_bytes(payload)
+        meta_sysroot = Path(directory) / "meta-sysroot"
+        build.stage_stage1_package(
+            {
+                "name": "meta",
+                "sha256": digest,
+                "artifact": meta_artifact.name,
+            },
+            meta_recipe,
+            meta_sysroot,
+            {},
+        )
+        failed += not check(
+            "Stage1 stages an empty meta-package without a data archive member",
+            (meta_sysroot / ".stage1-build-packages/meta").read_text(),
+            digest + "\n",
+        )
+
         sysroot_library = Path(directory) / "build-sysroot" / "usr/lib"
         sysroot_library.mkdir(parents=True)
         (sysroot_library / "legacy.la").write_text("libdir='/usr/lib'\n")
@@ -649,6 +747,10 @@ def main() -> int:
         failed += not check(
             "Stage1 GCC wrapper runs compiler subprograms through the target loader",
             f"-B{tool_wrapper_root / 'gcc-libexec'}/"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and f"--sysroot={sysroot_library.parents[1].resolve()}"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and f"-Wl,-rpath-link,{sysroot_library.resolve()}"
             in (tool_wrapper_root / "gcc-bin/gcc").read_text()
             and "-fuse-ld=lld"
             in (tool_wrapper_root / "gcc-bin/gcc").read_text()
@@ -852,7 +954,7 @@ def main() -> int:
         [],
     )
 
-    total = 81
+    total = 86
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

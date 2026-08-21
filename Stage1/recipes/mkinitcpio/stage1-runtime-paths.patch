@@ -1,0 +1,15 @@
+diff --git a/meson.build b/meson.build
+index 247c2bc..c81483f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -58,2 +58,2 @@
+-    systemd_system_unit_dir = systemd.get_variable('systemd_system_unit_dir')
+-    tmpfiles_dir = systemd.get_variable('tmpfiles_dir')
++    systemd_system_unit_dir = '/usr/lib/systemd/system'
++    tmpfiles_dir = '/usr/lib/tmpfiles.d'
+@@ -72 +72 @@
+-conf_data.set('UDEVD_PATH', udevd.full_path())
++conf_data.set('UDEVD_PATH', '/usr/lib/systemd/systemd-udevd')
+@@ -74 +74 @@
+-    conf_data.set('TMPFILES_PATH', tmpfiles.full_path())
++    conf_data.set('TMPFILES_PATH', '/usr/bin/systemd-tmpfiles')

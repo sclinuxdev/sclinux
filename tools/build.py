@@ -651,21 +651,29 @@ def stage_stage1_package(
         return
     artifact = recipe_path.parent / entry["artifact"]
     sysroot.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "tar",
-            "--zstd",
-            "--extract",
-            "--file",
-            str(artifact),
-            "--directory",
-            str(sysroot),
-            "--strip-components=1",
-            "data",
-        ],
-        check=True,
-        env=environment,
+    recipe = tomllib.loads(recipe_path.read_text())
+    scopes = (recipe, recipe.get("package", {}), recipe.get("source", {}))
+    has_payload = any(
+        scope.get(phase)
+        for scope in scopes
+        for phase in ("prepare", "build", "install")
     )
+    if has_payload:
+        subprocess.run(
+            [
+                "tar",
+                "--zstd",
+                "--extract",
+                "--file",
+                str(artifact),
+                "--directory",
+                str(sysroot),
+                "--strip-components=1",
+                "data",
+            ],
+            check=True,
+            env=environment,
+        )
     stamps.mkdir(parents=True, exist_ok=True)
     stamp.write_text(entry["sha256"] + "\n")
 
@@ -767,7 +775,12 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 r"(?:.+-)?(?:cc|c\+\+|gcc|g\+\+)(?:-[0-9.]+)?", executable.name
             ):
                 interpreter_options = (
+                    f" --sysroot={shlex.quote(str(resolved_sysroot))}"
                     " -fuse-ld=lld"
+                    f" -Wl,-rpath-link,{shlex.quote(str(resolved_sysroot / 'usr/lib'))}"
+                    f" -Wl,-rpath-link,{shlex.quote(str(resolved_sysroot / 'usr/lib64'))}"
+                    f" -Wl,-rpath-link,{shlex.quote(str(resolved_sysroot / 'lib'))}"
+                    f" -Wl,-rpath-link,{shlex.quote(str(resolved_sysroot / 'lib64'))}"
                     f" -B{shlex.quote(str(wrapper_root / 'gcc-libexec'))}/"
                     f" -B{shlex.quote(str(wrapper_root / 'gcc-bin'))}/"
                 )

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "mkinitcpio"
 version = "41.1"
-release = "1"
+release = "2"
 description = "Modular initramfs image creation utility"
 license = "GPL-2.0-only"
 channel = "system"
@@ -38,10 +38,11 @@ provides = [
 ]
 
 prepare = [
+    "patch -p1 < \"$RECIPE_DIR/stage1-runtime-paths.patch\"",
 ]
 
 build = [
-    "meson setup build --prefix=/usr --sysconfdir=/etc -Ddocs=false",
+    "meson setup build --prefix=/usr --libdir=lib --sysconfdir=/etc -Ddocs=false",
     "ninja -C build",
 ]
 
