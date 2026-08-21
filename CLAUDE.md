@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**本文件优先级最高。** 与 `docs/` 下任何文档冲突时，以本文件为准 —— 那些文档
+记录的是当时的结论，本文件记录的是现在的口径。发现出入不要「修正」本文件去
+迁就文档，也不要擅自改文档，先问。
+
 ---
 
 ## 0. 不要读的文件
@@ -189,7 +193,10 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 
 ## 6. 发行版政策（改动代价）
 
-来自 `docs/DISTRO_POLICY.md`。「极高」= 仓库全部二进制包作废、必须整体重编。
+「极高」= 仓库全部二进制包作废、必须整体重编。
+
+`docs/DISTRO_POLICY.md` 有一份更长的版本，但**下表与它有出入且以下表为准**：
+根文件系统与引导器不再作为已定选型，配方来源也不再硬性规定。
 
 | 项 | 决定 | 代价 |
 | :--- | :--- | :--- |
@@ -198,11 +205,12 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 | init | systemd | **低**（`service.toml` 与 init 解耦，`sage rebuild` 重生成脚本） |
 | 架构 | x86_64 单一 | 高 |
 | 发布模式 | 滚动，不做定版 | 高 |
-| 根文件系统 | XFS on LVM thin | 高 |
-| 引导器 | systemd-boot 优先，GRUB 备选 | 中 |
-| 配方来源 | 翻译 Arch PKGBUILD | 中 |
 
-翻译 PKGBUILD 时：保留出处标注；核对 Arch 补丁是否仍适用；
+配方来源不作硬性规定。Arch 的 PKGBUILD 可以拿来当参考 —— 它的 configure
+参数、补丁集与编译选项是社区长期踩坑的产物，`*.pkg.tar.zst` 也本就沿用
+Arch 的约定。但这是可选路径，从上游源码直接写配方同样成立。
+
+真要参考 PKGBUILD 时：保留出处标注；核对 Arch 补丁是否仍适用；
 **不要照搬依赖列表**，本项目的拆分粒度与 Arch 不同。
 
 `/usr` merge 是每个包的文件落点问题 —— 任何配方都不应再往
