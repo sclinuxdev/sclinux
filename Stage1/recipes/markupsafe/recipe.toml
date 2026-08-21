@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz"
-sha256 = ""
+sha256 = "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"
 
 dependencies = [
     "python >= 3.12.0",

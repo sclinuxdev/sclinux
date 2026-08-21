@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.5/pkgconf-3.0.5.tar.xz"
-sha256 = ""
+sha256 = "3acd3a8a3cce65a8d620321855d92fb602e026cbe8e13ee36bdec58483b59ace"
 
 dependencies = [
 ]
