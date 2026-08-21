@@ -1,0 +1,36 @@
+schema_version = 1
+
+[package]
+name = "libunistring"
+version = "1.4.2"
+release = "1"
+description = "Unicode string library used by GNU text tools"
+license = "LGPL-3.0-or-later"
+channel = "system"
+
+[source]
+url = "https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.2.tar.xz"
+sha256 = "5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c"
+
+dependencies = [
+]
+
+build_dependencies = [
+]
+
+provides = [
+    "libunistring",
+    "so:libunistring.so.5",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --disable-static",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR",
+]

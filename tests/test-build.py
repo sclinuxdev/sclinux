@@ -229,7 +229,12 @@ def main() -> int:
     failed += not check(
         "Stage1 manifest covers every canonical recipe",
         len(stage1_packages),
-        107,
+        108,
+    )
+    failed += not check(
+        "Stage1 builds libunistring before the gettext tools that load it",
+        stage1_packages.index("libunistring") < stage1_packages.index("gettext"),
+        True,
     )
     failed += not check(
         "Stage1 dependency order leaves the base meta-package last",
@@ -240,12 +245,12 @@ def main() -> int:
     failed += not check(
         "Stage1 source lock deduplicates canonical URLs",
         len(stage1_sources),
-        90,
+        91,
     )
     failed += not check(
         "Stage1 source lock retains every package reference",
         sum(len(source["packages"]) for source in stage1_sources),
-        103,
+        104,
     )
     rewrites = build.parse_url_rewrites(
         ["https://github.com/=https://mirror.invalid/https://github.com/"]
@@ -377,7 +382,7 @@ def main() -> int:
         failed += not check(
             "Stage1 renderer emits every manifest package",
             len(all_rendered),
-            107,
+            108,
         )
         failed += not check(
             "Stage1 renderer assigns one target architecture to every package",
@@ -725,7 +730,7 @@ def main() -> int:
         [],
     )
 
-    total = 70
+    total = 71
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

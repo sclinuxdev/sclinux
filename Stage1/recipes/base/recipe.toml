@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "base"
 version = "2.0.0"
-release = "1"
+release = "2"
 description = "sclinux Base System Meta-Package (Stage 1)"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -46,6 +46,7 @@ dependencies = [
     "acl",
     "libcap",
     "libseccomp",
+    "libunistring",
     "coreutils",
     "gmp",
     "mpfr",
