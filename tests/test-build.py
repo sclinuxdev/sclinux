@@ -335,6 +335,15 @@ def main() -> int:
             in inetutils["source"]["build"][0],
             True,
         )
+        iproute2 = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "iproute2" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 iproute2 probes and builds against its isolated sysroot",
+            'CC="gcc $LDFLAGS" ./configure' in iproute2["source"]["build"]
+            and 'HOSTCC="gcc $LDFLAGS"' in iproute2["source"]["build"][1],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -691,7 +700,7 @@ def main() -> int:
         [],
     )
 
-    total = 66
+    total = 67
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

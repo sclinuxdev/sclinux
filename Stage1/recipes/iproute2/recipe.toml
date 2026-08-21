@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "iproute2"
 version = "7.1.0"
-release = "1"
+release = "2"
 description = "IP routing and traffic control utilities (ip, ss, tc, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -28,7 +28,8 @@ prepare = [
 ]
 
 build = [
-    "make -j$(nproc)",
+    "CC=\"gcc $LDFLAGS\" ./configure",
+    "make -j$(nproc) CC=\"gcc $LDFLAGS\" HOSTCC=\"gcc $LDFLAGS\"",
 ]
 
 install = [
