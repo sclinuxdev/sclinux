@@ -112,6 +112,8 @@ sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信�
 ```
 {name}-{version}-{release}-{arch}.pkg.tar.zst
 ├── .METADATA/manifest.toml    # 元数据、provides、依赖
+├── .METADATA/files.idx        # 逐文件 type/mode/size/sha256/path/target
+├── .METADATA/triggers.toml    # 可选，包触发器
 ├── .METADATA/service.toml     # 可选，通用守护进程定义
 └── data/                      # 直接映射落盘（usr/bin/... etc/...）
 ```
@@ -120,8 +122,7 @@ sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信�
 元数据反推名字，缺了它两种架构的同名包会静默互相覆盖。
 
 打包时自动扫描 `data/` 下的 ELF：`DT_NEEDED` → `so:` 运行时依赖，
-`DT_SONAME` → 本包 provides。**这个扫描不会把包自己安装的 `lib*.so*` 文件名
-写进 provides**，是 Stage2 索引大量悬空约束的根源（见 §7）。
+`DT_SONAME` + 库文件名 + 版本化符号链接 → 本包 provides。
 
 ### 4.3 已实现能力
 
@@ -197,8 +198,9 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
    `linux-zen-headers`→`linux-headers`/`virtual/linux-headers`。
 6. **Meta 包**只聚合依赖、不含文件（`base` 就是，172 条依赖）。
 
-虚拟提供者**只用于真正互斥的底座**：`virtual/init`、`virtual/udev`、`virtual/libc`。
-内核、shell、awk、coreutils 是天然共存组件，按普通包管理，不要给它们造虚拟接口。
+排他性通过 `/etc/sage/capabilities.toml` 的 `[capabilities.<name>] exclusive = true` 声明，
+未声明的能力默认共存。`virtual/init`/`virtual/udev`/`virtual/libc` 是排他；
+`virtual/kernel`/`virtual/initramfs-generator`/`virtual/bootloader` 是共存。
 
 ---
 
