@@ -344,6 +344,14 @@ def main() -> int:
             and 'HOSTCC="gcc $LDFLAGS"' in iproute2["source"]["build"][1],
             True,
         )
+        kbd = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "kbd" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 kbd excludes unshipped Autotest build artifacts",
+            "--disable-tests" in kbd["source"]["build"][0],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -700,7 +708,7 @@ def main() -> int:
         [],
     )
 
-    total = 67
+    total = 68
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
