@@ -123,21 +123,34 @@ sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信�
 `DT_SONAME` → 本包 provides。**这个扫描不会把包自己安装的 `lib*.so*` 文件名
 写进 provides**，是 Stage2 索引大量悬空约束的根源（见 §7）。
 
-### 4.3 不存在的东西
+### 4.3 已实现能力
 
-文档里曾出现、但**源码中没有**：
+以下能力已在 sage 源码中实现（2026-08-21）：
 
-- `files.idx`（逐文件 SHA256）→ 所以没有逐文件完整性校验，也没有 `sage query files`
-- 包自带的 `triggers.toml` → 触发器是 `sage.rebuild` 里**硬编码的三钩子**：
-  变动 `usr/lib/`或`lib/` 下的 `.so` → `ldconfig`；
-  变动 `etc/ssl/certs/` 或 `usr/share/ca-certificates/` → `update-ca-certificates`；
-  变动 `usr/share/mime/` → `update-mime-database`。每笔事务每个动作最多一次。
-- CLI 的 `channel add` / `channel sync` / 按包的 `--channel` → **均未实现**，
-  `sage channel` 只打印已配置通道；通道靠手工编辑 `/etc/sage/channels.toml`。
+- **`files.idx`**（`.METADATA/files.idx`）：逐文件 type/mode/size/sha256/path/target，
+  在解包时校验。`sage query files <PKG>` 可列出已安装包的文件清单。
+- **包自带 `triggers.toml`**（`.METADATA/triggers.toml`）：包可声明 `[[triggers]]`，
+  通过 `on_paths` 前缀匹配或 `on_capability` 触发，执行 `exec` 或通过活动提供者的
+  `[[capability_hooks]]` 解析 `run_capability`。按 `priority` 排序，同一事务内去重。
+- **能力驱动触发器**：`[[capability_hooks]]` 在配方中声明某个 `capability` 的
+  调用方式（`exec` + `args`），触发器通过 `run_capability = "virtual/..."` 间接调用，
+  不必硬编码路径。initramfs 与引导器触发器已实现（`virtual/initramfs-generator` /
+  `virtual/bootloader`）。
+- **CLI 通道管理**：`sage channel add <NAME> <PATH>` / `sage channel sync <NAME>` /
+  `sage install --channel <NAME> <PKG>` 均已实现。`sage channel list` 列出已配置通道。
+- **构建期自校验**：`sage build` 扫描产物 ELF 的 `DT_SONAME` 写入 `provides`，
+  校验 `DT_NEEDED` 能否被已声明的 `build_dependencies` 满足，在打包前拦截缺失依赖。
 
-> **没有 initramfs 触发器，也没有引导器触发器。**
-> `sage --root /mnt install base` 不会生成 initramfs、不会同步内核到 ESP。
-> 装机流程必须自行 chroot 做这两步。
+**两级能力模型**：
+
+- **排他能力**（exclusive）：同一能力最多一个提供者安装，切换是重配置操作
+  （`sage rebuild` 更新 `/var/lib/sage/system.toml [providers]` 并重跑触发器）。
+  例：`virtual/init`、`virtual/udev`、`virtual/libc`。
+- **共存能力**（shared）：提供者可共存，`[providers]` 仅记录求解器的默认选择，
+  不排他。例：`virtual/kernel`、`virtual/initramfs-generator`、所有 `so:*`。
+
+排他性是**选入**的：`/etc/sage/capabilities.toml` 的 `[capabilities.<name>]` 加
+`exclusive = true`。未声明的能力默认共存。
 
 ### 4.4 `--root` 时的路径推导
 
@@ -216,26 +229,30 @@ Arch 的约定。但这是可选路径，从上游源码直接写配方同样成
 
 ---
 
-## 7. Stage2 已知缺陷
+## 7. Stage2 已知缺陷与 Extra 修复
 
-实际部署 Stage2 包集到目标根时暴露、**尚未在配方层修复**的问题：
+Stage2 包集部署时暴露的问题，以及 `Extra/` 树的修复状态（2026-08-21）：
 
-1. **ELF 扫描不生成 provides** —— 包自装的 `lib*.so*` 没写进 `provides`，
-   `sage repo index` 出来的索引有 60+ 条无人满足的 `so:` 约束，求解直接失败。
-2. **构建期不校验 `DT_NEEDED`** —— `xfsprogs` 误链宿主的 libdevmapper/libicu，
-   `gettext-dev` 误链 libunistring/libxml2，直到安装期才炸。
-   仓库缺 `device-mapper` 与 `icu` 包，`xfs_io`/`xfs_scrub` 装上也跑不起来。
-3. **配方仍往 `/usr/sbin`、`/usr/lib64` 装文件** —— 破坏 `base-files` 建立的
-   merged-`/usr` 软链。后果隐蔽：mkinitcpio 强制 `PATH=/usr/bin:/bin`，
-   于是找不到 `fsck`/`depmod`，**静默产出残缺 initramfs**。
-4. **grub 只构建了 BIOS 平台**（`--with-platform=pc --target=i386`），
-   缺 `x86_64-efi`，UEFI 机器装不了引导。需补第二遍 `--with-platform=efi --target=x86_64`。
-5. **仓库缺 tzdata、busybox、sudo** —— 缺 busybox 导致 mkinitcpio 的 `base` hook
-   硬失败，只能改用 `systemd` hook。
-6. **`hostname` 被 coreutils 与 inetutils 双重提供** —— 应在配方里禁掉其一。
+| 缺陷 | 修复位置 | 状态 |
+| :--- | :--- | :--- |
+| **ELF 扫描不生成 provides** | sage 源码 `e02aaaf` | ✅ 已修复 |
+| **构建期不校验 `DT_NEEDED`** | sage 源码 `e02aaaf` | ✅ 已修复 |
+| **仓库缺 device-mapper / icu** | `Extra/recipes/{device-mapper,icu}*/` | ✅ 已添加 |
+| **xfsprogs 误链宿主库** | `Extra/recipes/xfsprogs/` (release 3) | ✅ 已修复 |
+| **配方往 `/usr/sbin` 装** | `Extra/recipes/{util-linux,dosfstools,xfsprogs}/` | ✅ 已修复 |
+| **grub 只有 BIOS 平台** | `Extra/recipes/grub/` (release 3, UEFI-only) | ✅ 已修复 |
+| **仓库缺 tzdata / busybox / sudo** | `Extra/recipes/{tzcode,tzdata,busybox,sudo}/` | ✅ 已添加 |
+| **`hostname` 双重提供** | `Extra/recipes/inetutils/` (release 3, `--disable-hostname`) | ✅ 已修复 |
+| **缺 initramfs / 引导器触发器** | sage 源码 `945605c` + `Extra/recipes/{mkinitcpio,grub}/` | ✅ 已修复 |
 
-另：mkinitcpio 41.1 **不读 `/etc/mkinitcpio.conf.d/`**，且其 `systemd` hook 里
-`for nvpcr in /usr/lib/nvpcr/*.nvpcr` 没做 nullglob 保护。
+**mkinitcpio 41.1 遗留问题**（配方已打补丁缓解）：
+
+- **不读 `/etc/mkinitcpio.conf.d/`** —— `Extra/recipes/mkinitcpio/` 装了 `README`
+  说明该目录不生效，避免用户误配。
+- **`systemd` hook 的 nullglob 缺失** —— prepare 阶段打补丁 `shopt -s nullglob`。
+
+`Extra/build-extra.sh` 按拓扑序构建 17 个包（7 个 Stage2 重建 + 10 个新增），
+产物落 `Extra/repo/`。**用户自行运行该脚本**。
 
 ---
 
