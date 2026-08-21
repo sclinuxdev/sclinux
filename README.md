@@ -190,7 +190,11 @@ shc status --full
 
 ## 📄 开源许可证 (License)
 
-本项目采用 [BSD 3-Clause License](LICENSE) 开源协议。  
+ShenChen Linux 采用 [BSD 3-Clause License](LICENSE) 开源协议。
+
+由配方构建或随系统分发的上游组件可能采用各自的许可证，详见
+[第三方组件许可说明](NOTICE.md)。
+
 严禁未经书面许可使用「神宸」或「浩宸」之名进行商业广告背书。
 
 ---

@@ -77,8 +77,8 @@ SOURCE_STRINGS = ("url", "sha256")
 # Keys sage reads in each scope. Anything else is silently ignored by the
 # parser, which makes a typo look like it works.
 ALLOWED = {
-    "": {"schema_version", "package", "source", *MERGED},
-    "package": {*PACKAGE_STRINGS, *MERGED},
+    "": {"schema_version", "package", "source", "capability_hooks", *MERGED},
+    "package": {*PACKAGE_STRINGS, "capability_hooks", *MERGED},
     "source": {*SOURCE_STRINGS, *MERGED},
 }
 
@@ -114,6 +114,29 @@ def require_string(table: dict, field: str, scope: str, errors: list[str]) -> No
             f"{scope_label(scope)} {field} must be a quoted string, got {got} "
             f"-- sage would silently fall back to its default"
         )
+
+
+def check_capability_hooks(table: dict, scope: str, errors: list[str]) -> None:
+    hooks = table.get("capability_hooks")
+    if hooks is None:
+        return
+    if not isinstance(hooks, list):
+        errors.append(f"{scope_label(scope)} capability_hooks must be an array of tables")
+        return
+    for index, hook in enumerate(hooks):
+        label = f"{scope_label(scope)} capability_hooks[{index}]"
+        if not isinstance(hook, dict):
+            errors.append(f"{label} must be a table")
+            continue
+        unknown = sorted(set(hook) - {"capability", "exec", "args"})
+        if unknown:
+            errors.append(f"{label} unknown key(s): {', '.join(unknown)}")
+        for field in ("capability", "exec"):
+            if not isinstance(hook.get(field), str) or not hook[field]:
+                errors.append(f"{label} {field} must be a non-empty string")
+        args = hook.get("args", [])
+        if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+            errors.append(f"{label} args must be an array of strings")
 
 
 def validate(path: Path) -> list[str]:
@@ -153,6 +176,8 @@ def validate(path: Path) -> list[str]:
         scopes.append((src, "source"))
     for table, scope in scopes:
         check_scope(table, scope, errors)
+        if scope != "source":
+            check_capability_hooks(table, scope, errors)
 
     if src is not None:
         for field in SOURCE_STRINGS:

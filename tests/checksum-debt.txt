@@ -1,0 +1,6 @@
+# Recipes still carrying `sha256 = ""`, pinned by path.
+#
+# Adding a line here is not routine: it means shipping a source that sage will
+# download and build without verifying. Fix the checksum instead.
+#
+# Remove resolved entries:  python3 tests/validate-recipes.py --update-debt

@@ -27,12 +27,3 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
-NOTE ON BUNDLED / UPSTREAM COMPONENTS
-
-The `shc(Sage)` package manager, documented in `docs/SAGE_DESIGN.md` and
-developed upstream at https://github.com/antinomie1/sage, is distributed
-under its own BSD 2-Clause License. The BSD 3-Clause terms above apply to
-ShenChen Linux itself; refer to the upstream repository for Sage's terms.

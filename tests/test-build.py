@@ -121,12 +121,9 @@ def main() -> int:
     containerfile = (REPO / "Stage0" / "Containerfile").read_text()
     copied = [line for line in containerfile.splitlines() if line.startswith(("COPY ", "ADD "))]
     failed += not check(
-        "Stage0 copies only the audited Sage bootstrap integrity patch",
+        "Stage0 does not copy local Sage source patches",
         copied,
-        [
-            "COPY Stage1/recipes/sage/sage-bootstrap-install-integrity.patch "
-            "/tmp/sage-bootstrap-install-integrity.patch"
-        ],
+        [],
     )
     failed += not check(
         "Stage0 allows xmake inside the root-owned build container",
@@ -144,26 +141,21 @@ def main() -> int:
         True,
     )
     failed += not check(
-        "Stage0 applies the Sage bootstrap integrity patch",
+        "Stage0 builds the pinned Sage source without local patches",
         "patch -p1 < /tmp/sage-bootstrap-install-integrity.patch" in containerfile,
-        True,
+        False,
     )
-    sage_patch = (
-        REPO / "Stage1" / "recipes" / "sage" / "sage-bootstrap-install-integrity.patch"
-    ).read_text()
+    sage_recipe = build.tomllib.loads(
+        (REPO / "Stage1" / "recipes" / "sage" / "recipe.toml").read_text()
+    )
     failed += not check(
-        "Sage bootstrap patch validates archive identity and ownership before extraction",
-        "std::expected<std::vector<package::PackageManifest>, std::string>" in sage_patch
-        and "std::expected<std::optional<package::PackageManifest>, std::string>" in sage_patch
-        and "inspect_package_impl" in sage_patch
-        and "normalize_data_path" in sage_patch
-        and "auto package_txn = db.begin_write_txn()" in sage_patch
-        and "escape_toml_basic_string" in sage_patch
-        and "struct PackageIdentity" in sage_patch
-        and "check_file_conflicts" in sage_patch
-        and "expected_manifest" in sage_patch
-        and "run_package_postprocessing" in sage_patch,
-        True,
+        "Stage0 and Stage1 pin the merged Sage integrity release",
+        (sage_recipe["source"]["url"], sage_recipe["source"]["sha256"]),
+        (
+            "https://codeload.github.com/antinomie1/sage/tar.gz/"
+            "8629fdf9eec6a559514e7335c8a59fe27b5cfc47",
+            "99a5fbda5c7d9adac210e5f6fe27896dde3efb85ee71da9c364a40ede13c530d",
+        ),
     )
 
     command = build.stage0_command(
@@ -305,9 +297,9 @@ def main() -> int:
             canonical["source"]["sha256"],
         )
         failed += not check(
-            "Stage1 Sage applies the same bootstrap integrity patch",
+            "Stage1 Sage no longer applies the upstreamed integrity patch",
             rendered["package"]["prepare"],
-            ['patch -p1 < "$RECIPE_DIR/sage-bootstrap-install-integrity.patch"'],
+            [],
         )
         failed += not check(
             "Stage1 Sage passes the isolated sysroot to xmake links",

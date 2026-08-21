@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "11"
+release = "12"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
@@ -26,7 +26,6 @@ provides = [
 ]
 
 prepare = [
-    "patch -p1 < \"$RECIPE_DIR/sage-bootstrap-install-integrity.patch\"",
 ]
 
 build = [
@@ -39,5 +38,5 @@ install = [
 ]
 
 [source]
-url = "https://codeload.github.com/antinomie1/sage/tar.gz/3904a73cde2f88923e8e4aab065eeb5bd62f15b3"
-sha256 = "c57ff494a74762ecbcbbef3b734dc1fce185d778ff883798ef88914924b0b4db"
+url = "https://codeload.github.com/antinomie1/sage/tar.gz/8629fdf9eec6a559514e7335c8a59fe27b5cfc47"
+sha256 = "99a5fbda5c7d9adac210e5f6fe27896dde3efb85ee71da9c364a40ede13c530d"

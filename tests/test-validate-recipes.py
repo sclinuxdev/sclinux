@@ -41,6 +41,36 @@ CASES: list[tuple[str, bool, str]] = [
         'schema_version = 1\n[package]\nname = "base"\nversion = "1.0"\ndependencies = ["linux"]\n',
     ),
     (
+        "a top-level capability hook is valid",
+        True,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        'exec = "/usr/bin/grub-mkconfig"\nargs = ["-o", "/boot/grub/grub.cfg"]\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
+    ),
+    (
+        "a package-scoped capability hook is valid",
+        True,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\ninstall = ["true"]\n'
+        '[[package.capability_hooks]]\ncapability = "virtual/initramfs-generator"\n'
+        'exec = "/usr/bin/mkinitcpio"\nargs = ["-P"]\n',
+    ),
+    (
+        "a capability hook with a missing executable is rejected",
+        False,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
+    ),
+    (
+        "a capability hook with non-string arguments is rejected",
+        False,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        'exec = "/usr/bin/grub-mkconfig"\nargs = [1]\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
+    ),
+    (
         "a typo at the top level must not slip through",
         False,
         'schema_version = 1\ndependecies = ["libc"]\n[package]\nname = "x"\nversion = "1.0"\ninstall = [\'echo hi\']\n',

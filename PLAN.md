@@ -2,7 +2,7 @@
 
 **状态：** 执行中
 
-**基线：** `main` @ `abce051`
+**基线：** `main` @ `c49d13b`（已于功能分支合并）
 
 **工作分支：** `build/reproducible-multiarch`
 
@@ -29,8 +29,8 @@
 - `docs/INSTALLATION.md:73-85` 定义 GPT、ESP、LVM thin、XFS 的磁盘布局；
 - `docs/INSTALLATION.md:117-127` 选择 systemd-boot，并指出内核/ESP 同步仍缺自动机制；
 - `Stage1/manifest.toml:1-5` 声明 Stage1 应在 Stage0 chroot 中全量重建，但仓库当前没有所引用的 `stage1/scripts/gen-order.py` 或 Stage0 实现；
-- `tests/checksum-debt.txt` 记录了仍为空的源码校验和；
-- `Stage1/recipes/sage/recipe.toml:37`、`Stage1/recipes/gmp/recipe.toml:27` 和 `Stage1/recipes/linux-zen/recipe.toml:40-41` 仍含 x86_64 或本地 distfiles 硬编码。
+- `tests/checksum-debt.txt` 当前没有债务条目，全树有源码 URL 的配方都固定 SHA256；
+- `config/architectures.toml` 集中声明两种架构差异，Stage1 canonical recipes 保持架构无关。
 
 ## 2. 架构差异白名单
 
@@ -68,7 +68,7 @@ Wayland、桌面合成器、图形登录器、安装器 UI 与实体硬件全面
 
 通过条件：
 
-- `tests/checksum-debt.txt` 清空并移除临时豁免；
+- `tests/checksum-debt.txt` 没有债务条目或临时豁免；
 - 配方校验器拒绝空 SHA256、未知架构和不存在的本地补丁；
 - 源码预取在下载内容不匹配时返回非零状态。
 
@@ -213,7 +213,7 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | A：构建契约与输入 | 已完成 |
 | B：Stage0 与统一入口 | 已完成 |
 | C：配方双架构参数化 | 已完成 |
-| D：可启动系统包集 | 进行中（x86_64 Stage1 已完成 120/120，包归档已核对；待 rootfs 中生成并检查真实 initramfs） |
+| D：可启动系统包集 | 进行中（x86_64 Stage1 已完成 120/120，Sage PR #8 最终基线已接入；待全新 v6 rootfs 安装及真实 initramfs 检查） |
 | E：rootfs/qcow2 组装 | 未开始 |
 | F：x86_64 验证 | 未开始 |
 | G：aarch64 验证 | 未开始 |
@@ -243,12 +243,15 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | `sage install A B` 对全部包共用一笔 LMDB 写事务 | A 已写盘后 B 预检失败会回滚 A 的数据库记录，使 A 变成幽灵文件 | orphan prune 独立提交，每个成功解包包各自提交 LMDB；A 成功、B 冲突的回归确认 A 的文件与记录同时保留，B 均不存在 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage 只按包名保存归档路径 | 仓库同时存在多个版本时，solver 可能选中 2.0、实际解压 1.0，却把 LMDB 记录成 2.0；direct 1.0 也可能被仓库 2.0 的候选替换 | 归档按包名、版本/release、架构、channel 完整身份索引；direct 包锁定精确版本；解包器第二遍写入前再次核对所选身份；多版本、direct、错配归档和同包升级回归均通过 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | 两个 Sage 包包含同一普通文件时会静默覆盖 | 路径预检允许普通文件替换普通文件，`register_files()` 又直接覆盖 LMDB owner，先装包的文件和归属同时丢失 | 只读 inspect 收集真实 data 路径；在同一 LMDB 写事务内、解包前检查 owner，跨包冲突 fail closed，同包升级放行；注册函数自身再做原子复检 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
-| 新的文件所有权门禁揭示现有拆分包有 3,228 个非目录路径重叠 | `xz` 首先因 locale 与 `xz-libs` 重叠而中止；全量审计又发现 ncurses terminfo、PCRE2 文档/工具、util-linux/e2fsprogs 库文件及少量 man/config 冲突 | 按包职责收紧 14 个配方的 install 清理或重命名规则并提升 release；14 个 x86_64 包已重建，全仓审计只剩 Sage 特例 `usr/share/info/dir`，等待新 Sage 基线后以全新 120 包 rootfs 复验 | 配方与归档已修复；真实 rootfs 复验待 PR #8 新基线 |
+| 新的文件所有权门禁揭示现有拆分包有 3,228 个非目录路径重叠 | `xz` 首先因 locale 与 `xz-libs` 重叠而中止；全量审计又发现 ncurses terminfo、PCRE2 文档/工具、util-linux/e2fsprogs 库文件及少量 man/config 冲突 | 按包职责收紧 14 个配方的 install 清理或重命名规则并提升 release；14 个 x86_64 包已重建，全仓审计只剩 Sage 特例 `usr/share/info/dir`；PR #8 最终基线已接入 | 配方与归档已修复；全新 v6 rootfs 复验进行中 |
 | Sage 每包提交后仍把激活、FHS profile 和 triggers 延迟到整组安装成功 | A 已完成文件和 LMDB 提交后，B 失败会直接返回，导致 A 成为“已安装但未后处理”的半成品 | 每个包提交后立即完成 toolchain 激活、profile 重建和该包 triggers；整组成功后保留聚合 trigger pass；A 成功、B 失败回归确认 A 的 profile 与激活链接存在 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage extractor 接受 `..` data 路径，并可能沿归档内或既有符号链接逃出 `--root` | 恶意包可写入 sysroot 外部，且旧 probe 路径会在正式安装前触发风险 | 拒绝绝对路径、`..`、重复/不支持条目；拒绝归档 symlink 父路径并解析既有父链接的 root containment；三类越界回归均在写盘前失败 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage 把文件名中的反斜杠原样写入 TOML，查询又静默跳过解析失败项 | systemd 的 `system-systemd\\x2d...` 路径破坏 LMDB 清单；部分成功列表还会让 install 把该包 ownership 当孤儿清理，`query info` 则误报未安装 | manifest 与 repo index 统一转义；installed 列表和单包读取均改为 `expected`，让 install/remove/query/rebuild fail closed；损坏 LMDB fixture 确认 ownership 不变并返回数据库损坏 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | macOS 本机与 Stage1 chroot 都不能直接复用 Sage CI 的完整测试工具集 | 本机缺 Linux `elf.h`；精简 chroot 缺 `bsdtar`，构建用 wrapper 又记录宿主绝对 sysroot 路径 | 本机只做 diff/static 检查；在 x86_64 Stage1 GCC 15.3 环境 clean build，并为测试临时提供 chroot 内 `bsdtar` loader wrapper；11/11 通过 | 已规避；不进入产物 |
-| GitHub 的通用 `/archive/<commit>.tar.gz` 入口对新 Sage 基线返回 404 | 固定提交存在，但下载入口无法作为可复现源码地址使用 | 改用同一提交的 codeload 内容地址并固定 SHA-256 `c57ff494…b0b4db` | 已规避；源码身份未改变 |
+| GitHub 的通用 `/archive/<commit>.tar.gz` 入口对 Sage 固定提交返回 404 | 固定提交存在，但下载入口无法作为可复现源码地址使用 | 改用 PR #8 merge commit `8629fdf` 的 codeload 内容地址并固定 SHA-256 `99a5fbda…530d` | 已规避；源码身份未改变 |
+| Sage PR #8 合并后，本仓库仍复制并应用已上游化的临时补丁 | 新源码会重复应用相同改动，Stage0 与 Stage1 无法稳定重建 | Stage0 与 Stage1 同时固定 merge commit `8629fdf`，移除本地补丁及其测试假设；build 门禁 90/90 通过 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
+| 最新 `main` 的 Extra recipes 使用 `[[capability_hooks]]`，但 recipe validator 仍将其判为未知键 | `c49d13b` 的 GitHub Actions 失败，新增 grub/mkinitcpio 配方无法通过仓库自身门禁 | 校验器按 Sage 实际解析范围支持顶层和 `[package]` hooks，并校验 capability、exec、args；fixtures 39/39、全树 315/315 通过 | 已在本分支修复；待独立 PR 回补 `main` |
+| 多架构分支与最新 `main` 分叉 15/58 个提交 | `main` 新增 Stage2/Extra 与 checksum 修复，直接继续会让最终合并积累冲突 | 将 `c49d13b` 合入功能分支；保留已验证的 Zen 源码，吸收官方 man-pages 镜像和零债务哨兵文件 | 已解决；未合并回 `main` |
 | 构建机的 libguestfs/supermin 找不到可用于 appliance 的宿主内核 | `guestfish run` 无法启动，因而不能在无 device-mapper 权限的容器中组装真实磁盘布局 | 安装发行版 `linux-image-virtual` 后以 direct/TCG 后端完成 64 MiB qcow2 读写 smoke test | 已修复构建环境；不进入最终镜像 |
 | systemd 包有 `bootctl`，但没有 systemd-boot EFI 文件 | 当前配方未启用 `efi`/`bootloader`，且缺少构建所需的 pyelftools | 增加固定源码的 pyelftools，并显式启用 EFI/bootloader 与 sclinux SBAT 元数据；x86_64 包已核对 `systemd-bootx64.efi` | 已修复；aarch64 对应文件待该架构构建复验 |
 | systemd 从 Stage1 的 `dbus-1.pc` 读到带 sysroot 的绝对安装目录 | EFI 版 systemd 首次重建成功后，包路径审计发现 `pkg/root/.../build-sysroot/usr/share/dbus-1/services` | 显式固定 policy、session、system-service 与 interfaces 四个 D-Bus 目录，并增加回归测试；重建包路径正常 | 已修复；属于本仓库配方问题 |
