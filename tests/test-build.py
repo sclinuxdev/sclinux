@@ -179,7 +179,7 @@ def main() -> int:
     failed += not check(
         "Stage1 searches its isolated tools before Stage0",
         stage1_environment["PATH"].split(":")[0],
-        "/fixture-stage1-sysroot/.stage1-tool-wrappers/usr-bin",
+        "/fixture-stage1-sysroot/.stage1-tool-wrappers/usr/bin",
     )
     failed += not check(
         "Stage1 links against its isolated package libraries",
@@ -586,6 +586,27 @@ def main() -> int:
         (sysroot_binary.parent / "pkg-config").symlink_to("pkgconf")
         (sysroot_binary.parent / "perl").symlink_to("pkgconf")
         (sysroot_binary.parent / "cmake").symlink_to("pkgconf")
+        cmake_modules = sysroot_library.parent / "share/cmake-3.31"
+        cmake_modules.mkdir(parents=True)
+        gcc_binary = (
+            sysroot_library.parents[1] / "opt/channels/gcc/15/bin/gcc"
+        )
+        gcc_binary.parent.mkdir(parents=True)
+        gcc_binary.write_bytes(b"\x7fELFfixture")
+        gcc_binary.chmod(0o755)
+        gcc_ld = gcc_binary.parent / "ld"
+        gcc_ld.write_bytes(b"\x7fELFfixture")
+        gcc_ld.chmod(0o755)
+        gcc_cc1 = (
+            sysroot_library.parents[1]
+            / "opt/channels/gcc/15/libexec/gcc/aarch64-linux-gnu/15.3.0/cc1"
+        )
+        gcc_cc1.parent.mkdir(parents=True)
+        gcc_cc1.write_bytes(b"\x7fELFfixture")
+        gcc_cc1.chmod(0o755)
+        gcc_plugin = gcc_cc1.parent / "liblto_plugin.so"
+        gcc_plugin.write_bytes(b"\x7fELFfixture")
+        gcc_plugin.chmod(0o755)
         xmake_binary = (
             sysroot_library.parents[1] / "opt/channels/xmake/3/bin/xmake"
         )
@@ -600,7 +621,8 @@ def main() -> int:
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
         )
-        wrapper_root = sysroot_library.parents[1] / ".stage1-tool-wrappers/usr-bin"
+        tool_wrapper_root = sysroot_library.parents[1] / ".stage1-tool-wrappers"
+        wrapper_root = tool_wrapper_root / "usr/bin"
         failed += not check(
             "Stage1 wraps only target ELF tools with their isolated runtime libraries",
             sorted(path.name for path in wrapper_root.iterdir()),
@@ -608,19 +630,33 @@ def main() -> int:
         )
         failed += not check(
             "Stage1 exposes the locked xmake channel through a target wrapper",
-            (wrapper_root.parent / "xmake-bin/xmake").is_file(),
+            (tool_wrapper_root / "xmake-bin/xmake").is_file(),
             True,
         )
-        xmake_wrapper = (wrapper_root.parent / "xmake-bin/xmake").read_text()
+        xmake_wrapper = (tool_wrapper_root / "xmake-bin/xmake").read_text()
         failed += not check(
             "Stage1 xmake wrapper preserves its installed module root",
             f"--argv0 {xmake_binary} " in xmake_wrapper,
             True,
         )
         failed += not check(
-            "Stage1 CMake wrapper preserves its installed module root",
-            f"--argv0 {sysroot_binary.parent / 'cmake'} "
-            in (wrapper_root / "cmake").read_text(),
+            "Stage1 CMake wrapper preserves recursive target-loader execution",
+            '--argv0 "$0"' in (wrapper_root / "cmake").read_text()
+            and (tool_wrapper_root / "usr/share/cmake-3.31").resolve()
+            == cmake_modules.resolve(),
+            True,
+        )
+        failed += not check(
+            "Stage1 GCC wrapper runs compiler subprograms through the target loader",
+            f"-B{tool_wrapper_root / 'gcc-libexec'}/"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and "-fuse-ld=lld"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and (tool_wrapper_root / "gcc-libexec/cc1").is_file()
+            and (tool_wrapper_root / "gcc-libexec/liblto_plugin.so").resolve()
+            == gcc_plugin.resolve()
+            and (tool_wrapper_root / "gcc-bin/ld.lld").resolve()
+            == (tool_wrapper_root / "gcc-bin/ld").resolve(),
             True,
         )
         wrapper = (wrapper_root / "pkgconf").read_text()
@@ -684,6 +720,11 @@ def main() -> int:
             "Stage1 Autotools scripts call sibling tools inside the isolated sysroot",
             interpreter_environment["AUTOM4TE"],
             f"{sysroot_binary.parent / 'autom4te'} --prepend-include={autoconf_modules}",
+        )
+        failed += not check(
+            "Stage1 CMake discovers the target-loader pkg-config wrapper",
+            interpreter_environment["PKG_CONFIG"],
+            str(wrapper_root / "pkg-config"),
         )
 
         leaking_script = fixture_recipe.parent / "pkg/usr/bin/leak"
@@ -811,7 +852,7 @@ def main() -> int:
         [],
     )
 
-    total = 79
+    total = 81
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

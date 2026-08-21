@@ -494,6 +494,14 @@ def prepend_environment(
 
 def stage1_runtime_library_paths(sysroot: Path) -> list[Path]:
     paths = [sysroot / "usr/lib", sysroot / "usr/lib64", sysroot / "lib", sysroot / "lib64"]
+    paths.extend(
+        path
+        for path in (
+            sysroot / "opt/channels/gcc/15/lib64",
+            sysroot / "opt/channels/gcc/15/lib",
+        )
+        if path.is_dir()
+    )
     perl_root = sysroot / "usr/lib/perl5"
     if perl_root.is_dir():
         paths.extend(sorted(perl_root.glob("*/core_perl/CORE")))
@@ -541,11 +549,13 @@ def stage1_build_environment(
             environment,
             "PATH",
             [
-                str(wrappers / "usr-bin"),
-                str(wrappers / "usr-sbin"),
+                str(wrappers / "usr/bin"),
+                str(wrappers / "gcc-bin"),
+                str(wrappers / "usr/sbin"),
                 str(wrappers / "xmake-bin"),
                 str(usr / "bin"),
                 str(usr / "sbin"),
+                str(sysroot / "opt/channels/gcc/15/bin"),
                 str(sysroot / "opt/channels/xmake/3/bin"),
                 str(sysroot / "bin"),
                 str(sysroot / "sbin"),
@@ -561,6 +571,9 @@ def stage1_build_environment(
         environment["PKG_CONFIG_SYSROOT_DIR"] = str(sysroot.resolve())
         prepend_environment(environment, "ACLOCAL_PATH", [str(usr / "share/aclocal")])
         prepend_environment(environment, "CMAKE_PREFIX_PATH", [str(usr)])
+        pkg_config_wrapper = wrappers / "usr/bin/pkg-config"
+        if pkg_config_wrapper.is_file():
+            environment["PKG_CONFIG"] = str(pkg_config_wrapper)
         autoconf_modules = usr / "share/autoconf"
         if autoconf_modules.is_dir():
             environment["autom4te_perllibdir"] = str(autoconf_modules)
@@ -711,11 +724,19 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     shutil.rmtree(wrapper_root, ignore_errors=True)
     resolved_sysroot = sysroot.resolve()
     library_path = ":".join(str(path) for path in stage1_runtime_library_paths(sysroot))
-    for relative, wrapper_name in (
-        ("usr/bin", "usr-bin"),
-        ("usr/sbin", "usr-sbin"),
+    wrapper_sources = [
+        ("usr/bin", "usr/bin"),
+        ("usr/sbin", "usr/sbin"),
+        ("opt/channels/gcc/15/bin", "gcc-bin"),
         ("opt/channels/xmake/3/bin", "xmake-bin"),
-    ):
+    ]
+    gcc_libexec = sysroot / "opt/channels/gcc/15/libexec/gcc"
+    wrapper_sources.extend(
+        (str(path.relative_to(sysroot)), "gcc-libexec")
+        for path in sorted(gcc_libexec.glob("*/*"))
+        if path.is_dir()
+    )
+    for relative, wrapper_name in wrapper_sources:
         source = sysroot / relative
         if not source.is_dir():
             continue
@@ -732,15 +753,27 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
             if not is_elf:
                 continue
             wrapper = destination / executable.name
+            if wrapper_name == "gcc-libexec" and (
+                executable.name.endswith(".so") or ".so." in executable.name
+            ):
+                wrapper.symlink_to(executable)
+                continue
             interpreter_options = ""
             if executable.name == "perl" or executable.name.startswith("perl5."):
                 interpreter_options = "".join(
                     f" -I{shlex.quote(str(path))}" for path in stage1_perl_module_paths(sysroot)
                 )
+            if wrapper_name == "gcc-bin" and re.fullmatch(
+                r"(?:.+-)?(?:cc|c\+\+|gcc|g\+\+)(?:-[0-9.]+)?", executable.name
+            ):
+                interpreter_options = (
+                    " -fuse-ld=lld"
+                    f" -B{shlex.quote(str(wrapper_root / 'gcc-libexec'))}/"
+                    f" -B{shlex.quote(str(wrapper_root / 'gcc-bin'))}/"
+                )
             argv0 = (
                 shlex.quote(str(executable))
-                if wrapper_name == "xmake-bin"
-                or executable.name in {"cmake", "ccmake", "cpack", "ctest"}
+                if wrapper_name in {"gcc-bin", "gcc-libexec", "xmake-bin"}
                 else '"$0"'
             )
             wrapper.write_text(
@@ -751,6 +784,16 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 f"{shlex.quote(str(executable))}{interpreter_options} \"$@\"\n"
             )
             wrapper.chmod(0o755)
+    gcc_ld = wrapper_root / "gcc-bin/ld"
+    if gcc_ld.is_file():
+        (gcc_ld.parent / "ld.lld").symlink_to(gcc_ld.name)
+    cmake_share = sysroot / "usr/share"
+    if (sysroot / "usr/bin/cmake").is_file() and cmake_share.is_dir():
+        wrapper_share = wrapper_root / "usr/share"
+        wrapper_share.mkdir(parents=True, exist_ok=True)
+        for resource in sorted(cmake_share.glob("cmake-*")):
+            if resource.is_dir():
+                (wrapper_share / resource.name).symlink_to(resource)
 
 
 def validate_stage1_procfs(
