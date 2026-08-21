@@ -45,3 +45,14 @@ index.toml
 packages/*/distfiles/
 packages/*/src/
 packages/*/pkg/
+Stage1/recipes/*/distfiles/
+Stage1/recipes/*/src/
+Stage1/recipes/*/pkg/
+Stage2/recipes/*/distfiles/
+Stage2/recipes/*/src/
+Stage2/recipes/*/pkg/
+
+# ---- Stage 2 build workspace ----
+Stage2/logs/
+Stage2/repo/
+Stage2/.deploy-channel/

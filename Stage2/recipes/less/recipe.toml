@@ -1,0 +1,38 @@
+schema_version = 1
+
+[package]
+name = "less"
+version = "704"
+release = "2"
+description = "Terminal pager"
+license = "GPL-3.0-or-later OR BSD-2-Clause"
+channel = "system"
+
+[source]
+url = "https://ftpmirror.gnu.org/less/less-704.tar.gz"
+sha256 = ""
+
+dependencies = [
+    "ncurses-libs >= 6.6",
+    "pcre2-libs >= 10.47"
+]
+
+build_dependencies = [
+    "ncurses-dev >= 6.6",
+    "pcre2-dev >= 10.47"
+]
+
+provides = [
+    "less"
+]
+
+prepare = []
+
+build = [
+    "./configure --prefix=/usr --sysconfdir=/etc --with-regex=pcre2",
+    "make -j$(nproc)"
+]
+
+install = [
+    "make install DESTDIR=$DESTDIR"
+]
