@@ -243,4 +243,5 @@ Arch 的约定。但这是可选路径，从上游源码直接写配方同样成
 
 - 文档与注释用中文，代码标识符、命令、配置键用英文。
 - 新增 markdown 会被 `tests/check-links.py` 校验链接与锚点。
-- 提交信息用 Conventional Commits（`feat:` / `fix:` / `docs:` / `ci:` / `chore:`）。
+- 提交信息用 Conventional Commits（`feat:` / `fix:` / `docs:` / `ci:` / `chore:`），
+  **正文与标题一律用英文**。这是提交信息的唯一例外 —— 文档、注释仍用中文。
