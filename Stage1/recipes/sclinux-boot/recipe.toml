@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sclinux-boot"
 version = "1.0.0"
-release = "2"
+release = "3"
 description = "ShenChen Linux initramfs and systemd-boot integration"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -35,5 +35,5 @@ install = [
     "install -d $DESTDIR/etc",
     "printf 'MODULES=()\nBINARIES=(/usr/bin/lvm /usr/bin/dmsetup)\nFILES=()\nHOOKS=(systemd modconf block lvm2 filesystems fsck)\nCOMPRESSION=\"zstd\"\n' > $DESTDIR/etc/mkinitcpio.conf",
     "install -d $DESTDIR/etc/kernel",
-    "printf 'root=/dev/mapper/sclinux-root rd.lvm.lv=sclinux/root rw rootfstype=xfs console=@SC_KERNEL_CONSOLE@\n' > $DESTDIR/etc/kernel/cmdline",
+    "printf 'root=/dev/mapper/vg0-root rd.lvm.lv=vg0/root rw rootfstype=xfs console=@SC_KERNEL_CONSOLE@\n' > $DESTDIR/etc/kernel/cmdline",
 ]

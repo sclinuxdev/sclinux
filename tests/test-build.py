@@ -1047,13 +1047,18 @@ def main() -> int:
             "sclinux-boot", build.resolve_architecture("aarch64"), boot_output
         )
         boot_text = boot_output.read_text()
+        boot_helper = (boot_output.parent / "sclinux-update-boot.in").read_text()
+        kernel_install = (boot_output.parent / "90-sclinux-boot.install").read_text()
         failed += not check(
             "Stage1 boot integration selects AArch64 EFI and serial paths",
             "systemd-bootaa64.efi" in boot_text
             and "BOOTAA64.EFI" in boot_text
             and "ttyAMA0,115200" in boot_text
+            and "root=/dev/mapper/vg0-root rd.lvm.lv=vg0/root" in boot_text
             and "HOOKS=(systemd modconf block lvm2 filesystems fsck)" in boot_text
-            and "autodetect" not in boot_text,
+            and "autodetect" not in boot_text
+            and "SCLINUX_ESP:-/boot/efi" in boot_helper
+            and "SCLINUX_ESP:-/boot/efi" in kernel_install,
             True,
         )
         failed += not check(

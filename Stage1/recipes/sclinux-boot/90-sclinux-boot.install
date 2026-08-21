@@ -3,7 +3,7 @@ set -euo pipefail
 
 command_name=$1
 kernel_version=$2
-esp=${SCLINUX_ESP:-/efi}
+esp=${SCLINUX_ESP:-/boot/efi}
 
 case $command_name in
     add)

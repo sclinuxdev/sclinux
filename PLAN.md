@@ -245,4 +245,5 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | LVM2 在缺少 cache/thin 元数据工具时仍推断出不存在的 `/usr/sbin/cache_*` 路径 | 运行时配置会声称存在未打包的检查和修复工具；thin 路径已留空但 cache 路径未固定 | 配方显式把两类外部工具的 check、dump、repair、restore 路径全部留空；目标 ELF 配置查询已确认八个路径为空 | 配置已修复；真实 LVM thin 激活待启动验收 |
 | `stage1-run` 直接读取旧的 rendered recipe，canonical recipe 更新后仍可能成功打出旧 release | 增量重建不会自动刷新工作区，退出码无法证明新配方已经进入产物 | 运行前逐文件比较 canonical 渲染结果与工作区 recipe/helper；不一致时拒绝构建并提示重跑 `stage1-recipes` | 已修复；属于本仓库增量构建正确性问题 |
 | 交付 initramfs 使用 `autodetect` 会按云构建机硬件裁剪驱动 | 产物可能漏掉 UTM/QEMU 所需的 IDE、virtio 或架构特定存储模块，构建成功仍无法挂载根卷 | 交付配置移除 `autodetect`，由 `block`、`lvm2`、`filesystems` hook 收入可移植模块集；真实内容待 rootfs 阶段检查 | 已修复配置；待 initramfs 与双虚拟机启动复验 |
+| 启动包的卷组名和 ESP 默认挂载点偏离安装规范 | 内核参数寻找 `/dev/mapper/sclinux-root`，镜像规范实际创建 `vg0/root`；更新脚本默认写 `/efi` 而规范挂载 `/boot/efi` | 统一为 `root=/dev/mapper/vg0-root rd.lvm.lv=vg0/root` 和 `/boot/efi`，并增加双架构渲染回归检查 | 已修复；属于本仓库启动契约问题 |
 | mkinitcpio 已带 LVM2 hook，但基础包集此前缺少 LVM2 与 XFS 用户态工具 | 无法生成可激活 XFS-on-LVM-thin 根卷的 initramfs | 已补齐 LVM2、XFS 与镜像工具配方，x86_64 锁文件为 120 个唯一包；继续以 initramfs 内容检查和真实启动验证收口 | 包闭包已修复；真实 initramfs 待 rootfs 阶段验证 |
