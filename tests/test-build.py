@@ -388,6 +388,18 @@ def main() -> int:
             ),
             True,
         )
+        dbus = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "dbus" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 dbus installs libraries and units outside the build sysroot",
+            "--libdir=lib" in dbus["source"]["build"][1]
+            and "-Dsystemd_system_unitdir=/usr/lib/systemd/system"
+            in dbus["source"]["build"][1]
+            and "-Dsystemd_user_unitdir=/usr/lib/systemd/user"
+            in dbus["source"]["build"][1],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -744,7 +756,7 @@ def main() -> int:
         [],
     )
 
-    total = 72
+    total = 73
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
