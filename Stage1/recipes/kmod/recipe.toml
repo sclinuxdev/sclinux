@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "kmod"
 version = "34.2"
-release = "1"
+release = "2"
 description = "Kernel module management tools (modprobe, lsmod, depmod) and libkmod"
 license = "LGPL-2.1-or-later"
 channel = "system"
@@ -36,7 +36,7 @@ prepare = [
 
 build = [
     "mkdir -p build",
-    "cd build && meson setup --prefix=/usr --buildtype=release -D manpages=false ..",
+    "cd build && meson setup --prefix=/usr --libdir=lib --buildtype=release -D manpages=false ..",
     "cd build && ninja -j$(nproc)",
 ]
 

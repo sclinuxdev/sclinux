@@ -361,6 +361,14 @@ def main() -> int:
             and "--with-{b,yes}crypt" not in shadow["source"]["build"][1],
             True,
         )
+        kmod = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "kmod" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 kmod installs libraries in the shared package search root",
+            "--libdir=lib" in kmod["source"]["build"][1],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -717,7 +725,7 @@ def main() -> int:
         [],
     )
 
-    total = 69
+    total = 70
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
