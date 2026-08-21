@@ -400,6 +400,17 @@ def main() -> int:
             in dbus["source"]["build"][1],
             True,
         )
+        man_db = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "man-db" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 man-db installs systemd data outside the build sysroot",
+            "--with-systemdtmpfilesdir=/usr/lib/tmpfiles.d"
+            in man_db["source"]["build"][0]
+            and "--with-systemdsystemunitdir=/usr/lib/systemd/system"
+            in man_db["source"]["build"][0],
+            True,
+        )
 
         all_output = Path(directory) / "all-recipes"
         all_rendered = build.render_stage1_recipes(
@@ -756,7 +767,7 @@ def main() -> int:
         [],
     )
 
-    total = 73
+    total = 74
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
