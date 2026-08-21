@@ -133,8 +133,10 @@ for pkg in "${BUILD_ORDER[@]}"; do
     echo "-----------------------------------------------------------------"
 
     if sage build "${RECIPE_PATH}" > "${LOGS_DIR}/${pkg}.log" 2>&1; then
-        find "${RECIPE_PATH}" -maxdepth 1 -name "*.pkg.tar.zst" -exec cp -f {} "${REPO_DIR}/" \;
-        log_success "[${CURRENT}/${TOTAL}] ${pkg} built -> ${REPO_DIR}"
+        # Create subdirectory for this package
+        mkdir -p "${REPO_DIR}/${pkg}"
+        find "${RECIPE_PATH}" -maxdepth 1 -name "*.pkg.tar.zst" -exec cp -f {} "${REPO_DIR}/${pkg}/" \;
+        log_success "[${CURRENT}/${TOTAL}] ${pkg} built -> ${REPO_DIR}/${pkg}"
         SUCCESS_PKGS+=("${pkg}")
     else
         log_error "[${CURRENT}/${TOTAL}] ${pkg} FAILED. Log: ${LOGS_DIR}/${pkg}.log"
