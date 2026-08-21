@@ -137,6 +137,15 @@ def main() -> int:
         "patch -p1 < /tmp/sage-reproducible-archives.patch" in containerfile,
         True,
     )
+    sage_patch = (
+        REPO / "Stage1" / "recipes" / "sage" / "sage-reproducible-archives.patch"
+    ).read_text()
+    failed += not check(
+        "Sage writes POSIX ustar headers for long payload paths",
+        'std::memcpy(hdr.magic, "ustar", 5);' in sage_patch
+        and 'std::memcpy(hdr.version, "00", 2);' in sage_patch,
+        True,
+    )
 
     command = build.stage0_command(
         "aarch64",
@@ -673,7 +682,7 @@ def main() -> int:
         [],
     )
 
-    total = 64
+    total = 65
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

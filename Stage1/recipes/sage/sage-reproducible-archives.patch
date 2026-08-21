@@ -21,6 +21,13 @@ diff --git a/src/cli/main.cpp b/src/cli/main.cpp
 diff --git a/src/core/sage.archive.cppm b/src/core/sage.archive.cppm
 --- a/src/core/sage.archive.cppm
 +++ b/src/core/sage.archive.cppm
+@@ -348,4 +348,4 @@ inline std::expected<void, std::string> create_package(
+-        std::memcpy(hdr.magic, "ustar ", 6);
+-        std::memcpy(hdr.version, " \0", 2);
++        std::memcpy(hdr.magic, "ustar", 5);
++        std::memcpy(hdr.version, "00", 2);
+         std::memcpy(hdr.uname, "root", 4);
+         std::memcpy(hdr.gname, "root", 4);
 @@ -393,7 +393,15 @@ inline std::expected<void, std::string> create_package(
  
      // 3. Append data/... filesystem payload
