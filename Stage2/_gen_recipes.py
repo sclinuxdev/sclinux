@@ -167,10 +167,99 @@ AT_BUILD = [
 ]
 AT_INSTALL = ["make install DESTDIR=$DESTDIR"]
 
+# SHA-256 values keyed by canonical source URL. Split packages reuse entries.
+SOURCE_SHA256 = {
+    "https://astron.com/pub/file/file-5.48.tar.gz": "ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283",
+    "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.9.tar.xz": "3271a4ae3897b38352980f2b0975bae61bca81c644d186221c5ae928bcc072b0",
+    "https://cdn.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.78.tar.xz": "0d621e562fd932ccf67b9660fb018e468a683d7b827541df27813228c996bb11",
+    "https://curl.se/download/curl-8.21.0.tar.xz": "aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6",
+    "https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz": "0ba2a1a4b16afe7bceb2c07e9ce99a8c2c3508e5dec290dbb643384bd6beb7e2",
+    "https://deb.debian.org/debian/pool/main/libp/libpipeline/libpipeline_1.5.8.orig.tar.gz": "1b1203ca152ccd63983c3f2112f7fe6fa5afd453218ede5153d1b31e11bb8405",
+    "https://download-mirror.savannah.gnu.org/releases/acl/acl-2.4.0.tar.xz": "e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3",
+    "https://download-mirror.savannah.gnu.org/releases/attr/attr-2.6.0.tar.xz": "6c8a2148a7b85043b68492bce43316b0e2e214fc4e628c7ede078e76e216330b",
+    "https://download.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz": "8afebb6f7eb6bb8542929458841f5c7e6f240e30c86358c1fbcefbea076c87d9",
+    "https://downloads.sourceforge.net/project/expect/Expect/5.45.4/expect5.45.4.tar.gz": "49a7da83b0bdd9f46d04a04deec19c7767bb9a323e40c4781f89caf760b92c34",
+    "https://downloads.sourceforge.net/project/procps-ng/Production/procps-ng-4.0.7.tar.xz": "9d2021f47a4501c667862c9942a92d1953694b21d11bcd1702e83eb594e3d67d",
+    "https://downloads.sourceforge.net/project/psmisc/psmisc/psmisc-23.7.tar.xz": "58c55d9c1402474065adae669511c191de374b0871eec781239ab400b907c327",
+    "https://downloads.sourceforge.net/project/tcl/Tcl/8.6.18/tcl8.6.18-src.tar.gz": "14f9af32b1767ff718477a8f974ad03c34341097e6b43f4ce54644ee974e268e",
+    "https://files.pythonhosted.org/packages/46/ef/34533186e76c526d9ec17a1ad9a10c7354cbfb20f51583cc36dfe4bdccd0/flit_core-4.0.2.tar.gz": "b6929defd93884b584d7c87829e0e7b5c26ed6be17b0b873979019314aa841c8",
+    "https://files.pythonhosted.org/packages/48/91/d58a3eb45ed54bf32b96806dd2f4efd407f7a9675953e15e8ef257840a0d/meson-1.12.0.tar.gz": "88afe0c20e52030218924ac37d0c81c59b4b5f3ae3752c8c6d7470c7d365886c",
+    "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz": "f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73",
+    "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz": "94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79",
+    "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz": "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698",
+    "https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz": "94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322",
+    "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz": "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d",
+    "https://ftp.gnu.org/gnu/dejagnu/dejagnu-1.6.3.tar.gz": "87daefacd7958b4a69f88c6856dbd1634261963c414079d0c371f589cd66a2e3",
+    "https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.xz": "71132a3fb71e68245b8f2ac4e9e97137d3e5c02f415636eb508ae607bc01add7",
+    "https://ftpmirror.gnu.org/automake/automake-1.18.1.tar.xz": "168aa363278351b89af56684448f525a5bce5079d0b6842bd910fdd3f1646887",
+    "https://ftpmirror.gnu.org/coreutils/coreutils-9.11.tar.xz": "394024eda0a5955217ceda9cd1201e65dc8fa3aa29c2951135a49521d57c3cc3",
+    "https://ftpmirror.gnu.org/groff/groff-1.24.1.tar.gz": "74e2819795b6aff431aeac983d63a9c8968eeaba2a2eba7df8ba4c7b41e7cfd8",
+    "https://ftpmirror.gnu.org/inetutils/inetutils-2.8.tar.gz": "57b3cf4f77555992881e5ba2a09a63b05aa2c56342a60ed4305b5f45938390b5",
+    "https://ftpmirror.gnu.org/less/less-704.tar.gz": "20a0b0a2bb2525fa53c7eee9beb854b4c9cf172eabb209af7020743547bfe9fb",
+    "https://github.com/Mic92/iana-etc/releases/download/20260811/iana-etc-20260811.tar.gz": "c2aef2efc628eb281eb070fef7119a5cef40a5682e33802b0c0230909ad4595c",
+    "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.bz2": "47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7",
+    "https://github.com/besser82/libxcrypt/releases/download/v4.5.2/libxcrypt-4.5.2.tar.xz": "71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071",
+    "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
+    "https://github.com/fastfetch-cli/fastfetch/archive/refs/tags/2.67.1.tar.gz": "52489550d1fdeac8bde8b3442064e3bc78d28fda752a171dc46a6cd97454f237",
+    "https://github.com/gavinhoward/bc/releases/download/7.0.3/bc-7.0.3.tar.xz": "91eb74caed0ee6655b669711a4f350c25579778694df248e28363318e03c7fc4",
+    "https://github.com/libexpat/libexpat/releases/download/R_2_8_3/expat-2.8.3.tar.xz": "f6256df90c906773d344da084402b7d3e4f22ed41b1a59c989098a83d3ea0c85",
+    "https://github.com/libffi/libffi/releases/download/v3.8.0/libffi-3.8.0.tar.gz": "7da3e2d9a171eb0a038f592ecad3ff2bb2550f3496d87b3b29ad0cf4430c0db4",
+    "https://github.com/lz4/lz4/archive/refs/tags/v1.10.0.tar.gz": "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b",
+    "https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz": "8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155",
+    "https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.2.tar.gz": "974d6b2f4eeefa25625d34da3cb36bdcebe7fbce40f4c16ac0835fd1c0cbae17",
+    "https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.5/pkgconf-3.0.5.tar.xz": "3acd3a8a3cce65a8d620321855d92fb602e026cbe8e13ee36bdec58483b59ace",
+    "https://github.com/shadow-maint/shadow/releases/download/4.20.2/shadow-4.20.2.tar.gz": "e5016b40541ee6fa02ea3d409547cef6e7eea9b31f0e3482e4874f87c1d0c7c5",
+    "https://github.com/systemd/systemd/archive/refs/tags/v261.2.tar.gz": "ed1059ff964f5df35b6056434cc17cc83f86dc913f10489948a0b19b6081c5ec",
+    "https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz": "e87aae032bf07c26f85ac0ed3250998c37621d95f8bd748b31f15b33c45ee995",
+    "https://github.com/xmake-io/xmake/releases/download/v3.1.0/xmake-v3.1.0.tar.gz": "84aae0926d293f486297dfb63fc4cd802218124c9c91b141f2004dcc4d509fdd",
+    "https://gitlab.archlinux.org/archlinux/mkinitcpio/mkinitcpio/-/archive/v41.1/mkinitcpio-v41.1.tar.gz": "202ffca349ceb6b62513cc65a67d6fc0c0c15cacc72710ce5228b444cf1317e6",
+    "https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz": "355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11",
+    "https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.xz": "fd5bf388cbdbe006a3d3b318d983b2948382440acc85a87f1e7d108653e8db0b",
+    "https://mirrors.edge.kernel.org/pub/linux/utils/kbd/kbd-2.10.0.tar.xz": "6e5ca4f8d76ee9e3a8db700b667f13e12aac9933828a64e1aaad93d26be9b479",
+    "https://mirrors.edge.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.2.tar.xz": "5a5d5073070cc7e0c7a7a3c6ec2a0e1780850c8b47b3e3892226b93ffcb9cb54",
+    "https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-7.1.0.tar.xz": "fd9fa1b95809417157ca83dd72957e3261bdbce896353cb936f80af0b33a4b5c",
+    "https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.2.tar.xz": "03a05d3adf9602ef128f2da05b84b3205ce60c351e5737c0370f74000679ce8a",
+    "https://mirrors.kernel.org/gnu/autoconf/autoconf-2.73.tar.xz": "9fd672b1c8425fac2fa67fa0477b990987268b90ff36d5f016dae57be0d6b52e",
+    "https://mirrors.kernel.org/gnu/bash/bash-5.3.tar.gz": "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba",
+    "https://mirrors.kernel.org/gnu/binutils/binutils-2.47.tar.xz": "154ab23b60070e8f27013c22977f1129425d67d1e8acd6e13010e617811e4cff",
+    "https://mirrors.kernel.org/gnu/bison/bison-3.8.2.tar.xz": "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2",
+    "https://mirrors.kernel.org/gnu/diffutils/diffutils-3.12.tar.xz": "7c8b7f9fc8609141fdea9cece85249d308624391ff61dedaf528fcb337727dfd",
+    "https://mirrors.kernel.org/gnu/findutils/findutils-4.11.0.tar.xz": "bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd",
+    "https://mirrors.kernel.org/gnu/gawk/gawk-5.4.1.tar.xz": "07f6f7342b7febe4313fc2c2542ad93d64fe20ad8717200109f105a826f5fd37",
+    "https://mirrors.kernel.org/gnu/gcc/gcc-15.3.0/gcc-15.3.0.tar.xz": "fa59c1beef8995f27c4d71c1df227587189315d3e6faff1bb4306e61b0c530eb",
+    "https://mirrors.kernel.org/gnu/gdbm/gdbm-1.26.tar.gz": "6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e",
+    "https://mirrors.kernel.org/gnu/glibc/glibc-2.44.tar.xz": "37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667",
+    "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898",
+    "https://mirrors.kernel.org/gnu/gperf/gperf-3.3.tar.gz": "fd87e0aba7e43ae054837afd6cd4db03a3f2693deb3619085e6ed9d8d9604ad8",
+    "https://mirrors.kernel.org/gnu/grep/grep-3.12.tar.xz": "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9",
+    "https://mirrors.kernel.org/gnu/gzip/gzip-1.14.tar.xz": "01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6",
+    "https://mirrors.kernel.org/gnu/libtool/libtool-2.6.2.tar.xz": "2ef1067c16c97db930fd740cc9bc3d3ba9a583804ae5ac42cc3e8719e49e191e",
+    "https://mirrors.kernel.org/gnu/m4/m4-1.4.21.tar.xz": "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66",
+    "https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz": "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3",
+    "https://mirrors.kernel.org/gnu/mpc/mpc-1.4.1.tar.xz": "91204cd32f164bd3b7c992d4a6a8ce6519511aadab30f78b6982d0bf8d73e931",
+    "https://mirrors.kernel.org/gnu/mpfr/mpfr-4.2.2.tar.xz": "b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01",
+    "https://mirrors.kernel.org/gnu/patch/patch-2.8.tar.xz": "f87cee69eec2b4fcbf60a396b030ad6aa3415f192aa5f7ee84cad5e11f7f5ae3",
+    "https://mirrors.kernel.org/gnu/readline/readline-8.3.tar.gz": "fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc",
+    "https://mirrors.kernel.org/gnu/sed/sed-4.10.tar.xz": "b8e72182b2ec96a3574e2998c47b7aaa64cc20ce000d8e9ac313cc07cecf28c7",
+    "https://mirrors.kernel.org/gnu/tar/tar-1.35.tar.xz": "4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16",
+    "https://mirrors.kernel.org/gnu/texinfo/texinfo-7.3.tar.xz": "51f74eb0f51cfa9873b85264dfdd5d46e8957ec95b88f0fb762f63d9e164c72e",
+    "https://mirrors.kernel.org/pub/linux/docs/man-pages/man-pages-6.18.tar.xz": "c934fadc8b59748c68227a34f6581d2ddf8282b73cdcd52546c8cd88b74b24d1",
+    "https://sourceware.org/elfutils/ftp/0.196/elfutils-0.196.tar.bz2": "fd5cc6b77ad6773cac93cb3f415f9318ac3b3455eecf801f6b4a742c4f6c7209",
+    "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+    "https://tukaani.org/xz/xz-5.8.3.tar.xz": "fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6",
+    "https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz": "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8",
+    "https://www.cpan.org/src/5.0/perl-5.44.0.tar.xz": "505cf43912e9480495c344c70260452e32aa2a73c546a026b3f100053b23ce91",
+    "https://www.openssl.org/source/openssl-4.0.1.tar.gz": "2db3f3a0d6ea4b59e1f094ace2c8cd536dffb87cdc39084c5afa1e6f7f37dd09",
+    "https://www.python.org/ftp/python/3.14.7/Python-3.14.7.tar.xz": "3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81",
+    "https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz": "0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c",
+    "https://zlib.net/zlib-1.3.2.tar.gz": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+}
 # ===========================================================================
 PKGS: list[dict] = []
 
 def P(**kw):
+    if kw.get("url") and not kw.get("sha256"):
+        kw["sha256"] = SOURCE_SHA256[kw["url"]]
     kw.setdefault("release", "2")
     kw.setdefault("channel", "system")
     kw.setdefault("prepare", [])
@@ -996,7 +1085,7 @@ P(name="xmake", version="3.1.0", release="3", description="xmake C/C++ build uti
            "[ -x \"$DESTDIR/opt/channels/xmake/3/bin/xmake\" ] || { echo 'ERROR: xmake not installed at /opt/channels/xmake/3/bin/xmake' >&2; exit 1; }"])
 
 # ---------- glibc / linux-zen-headers (UAPI bound to linux-zen 7.1.9) ----------
-LINUX_ZEN_URL = "https://mirrors.tuna.tsinghua.edu.cn/kernel/v7.x/linux-7.1.9.tar.xz"
+LINUX_ZEN_URL = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.9.tar.xz"
 P(name="linux-zen-headers", version="7.1.9", description="Linux ZEN UAPI headers (bound to linux-zen 7.1.9)",
   license="GPL-2.0-only", url=LINUX_ZEN_URL,
   deps=[], provides=["linux-zen-headers", "linux-headers", "virtual/linux-headers"],
@@ -1109,7 +1198,7 @@ P(name="packaging", version="26.3", description="Python packaging core utilities
            "python3 -c \"import sys, zipfile, glob; [zipfile.ZipFile(f).extractall(sys.argv[1]) for f in glob.glob('dist/*.whl')]\" $DESTDIR/usr/lib/python3.14/site-packages"])
 P(name="wheel", version="0.48.0", description="Python wheel packaging tool",
   license="MIT",
-  url="https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f5baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz",
+  url="https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz",
   deps=["python >= 3.14.7", "flit-core >= 4.0.2"], bdeps=["python >= 3.14.7", "flit-core >= 3.9.0"],
   provides=["wheel"],
   build=["python3 -m flit_core.wheel"],
@@ -1547,7 +1636,7 @@ P(name="sage", version="0.2.0", release="5", description="Universal Multi-Layer 
   build=["SAGE_SOURCE_DIR=\"${SAGE_SOURCE_DIR:-/home/ir/distro/sage}\"; if [ ! -d \"$SAGE_SOURCE_DIR\" ] && [ -d /distro/sage ]; then SAGE_SOURCE_DIR=/distro/sage; fi; cd \"$SAGE_SOURCE_DIR\" && XMAKE_ROOT=y xmake f -c -m release -y && XMAKE_ROOT=y xmake -y"],
   install=["SAGE_SOURCE_DIR=\"${SAGE_SOURCE_DIR:-/home/ir/distro/sage}\"; if [ ! -d \"$SAGE_SOURCE_DIR\" ] && [ -d /distro/sage ]; then SAGE_SOURCE_DIR=/distro/sage; fi; install -Dm755 \"$SAGE_SOURCE_DIR/build/linux/x86_64/release/sage\" $DESTDIR/usr/bin/sage"])
 P(name="mkinitcpio", version="41.1", description="Modular initramfs image creation utility",
-  license="GPL-2.0-only", url="https://sources.archlinux.org/other/mkinitcpio/mkinitcpio-41.1.tar.gz",
+  license="GPL-2.0-only", url="https://gitlab.archlinux.org/archlinux/mkinitcpio/mkinitcpio/-/archive/v41.1/mkinitcpio-v41.1.tar.gz",
   deps=["bash >= 5.3.15", "kmod >= 34.2", "coreutils >= 9.11", "util-linux >= 2.42.2", "findutils >= 4.11.0",
         "grep >= 3.12", "gawk >= 5.4.1", "sed >= 4.10", "zstd >= 1.5.7", "libarchive >= 3.8.9",
         "systemd >= 261.2", "systemd-libs >= 261.2", "systemd-udev >= 261.2"],
@@ -1834,4 +1923,3 @@ def sync_build_sh() -> None:
 
 if __name__ == "__main__":
     main()
-

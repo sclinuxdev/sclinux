@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://mirrors.kernel.org/gnu/bison/bison-3.8.2.tar.xz"
-sha256 = ""
+sha256 = "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2"
 
 dependencies = [
     "m4 >= 1.4.21"

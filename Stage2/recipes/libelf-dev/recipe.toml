@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://sourceware.org/elfutils/ftp/0.196/elfutils-0.196.tar.bz2"
-sha256 = ""
+sha256 = "fd5cc6b77ad6773cac93cb3f415f9318ac3b3455eecf801f6b4a742c4f6c7209"
 
 dependencies = [
     "libelf >= 0.196",

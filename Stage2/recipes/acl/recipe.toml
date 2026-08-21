@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://download-mirror.savannah.gnu.org/releases/acl/acl-2.4.0.tar.xz"
-sha256 = ""
+sha256 = "e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3"
 
 dependencies = [
     "acl-libs >= 2.4.0",

@@ -10,7 +10,7 @@ channel = "toolchain/xmake:3"
 
 [source]
 url = "https://github.com/xmake-io/xmake/releases/download/v3.1.0/xmake-v3.1.0.tar.gz"
-sha256 = ""
+sha256 = "84aae0926d293f486297dfb63fc4cd802218124c9c91b141f2004dcc4d509fdd"
 
 dependencies = [
     "gcc-libs >= 15.3.0"
