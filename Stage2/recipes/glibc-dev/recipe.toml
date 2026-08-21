@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://mirrors.kernel.org/gnu/glibc/glibc-2.44.tar.xz"
-sha256 = ""
+sha256 = "37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667"
 
 dependencies = [
     "glibc >= 2.44",

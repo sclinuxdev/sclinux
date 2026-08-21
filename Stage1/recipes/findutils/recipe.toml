@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://mirrors.kernel.org/gnu/findutils/findutils-4.11.0.tar.xz"
-sha256 = ""
+sha256 = "bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
 
 dependencies = [
 ]

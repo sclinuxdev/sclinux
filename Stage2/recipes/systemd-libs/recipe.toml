@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/systemd/systemd/archive/refs/tags/v261.2.tar.gz"
-sha256 = ""
+sha256 = "ed1059ff964f5df35b6056434cc17cc83f86dc913f10489948a0b19b6081c5ec"
 
 dependencies = [
     "kmod-libs >= 34.2",

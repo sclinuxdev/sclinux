@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/fastfetch-cli/fastfetch/archive/refs/tags/2.67.1.tar.gz"
-sha256 = ""
+sha256 = "52489550d1fdeac8bde8b3442064e3bc78d28fda752a171dc46a6cd97454f237"
 
 dependencies = [
     "glibc >= 2.44",

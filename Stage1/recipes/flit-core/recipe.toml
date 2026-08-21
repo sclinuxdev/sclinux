@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://files.pythonhosted.org/packages/46/ef/34533186e76c526d9ec17a1ad9a10c7354cbfb20f51583cc36dfe4bdccd0/flit_core-4.0.2.tar.gz"
-sha256 = ""
+sha256 = "b6929defd93884b584d7c87829e0e7b5c26ed6be17b0b873979019314aa841c8"
 
 dependencies = [
     "python >= 3.12.0",

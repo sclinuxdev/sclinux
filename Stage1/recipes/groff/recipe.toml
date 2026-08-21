@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://ftpmirror.gnu.org/groff/groff-1.24.1.tar.gz"
-sha256 = ""
+sha256 = "74e2819795b6aff431aeac983d63a9c8968eeaba2a2eba7df8ba4c7b41e7cfd8"
 
 dependencies = [
 ]

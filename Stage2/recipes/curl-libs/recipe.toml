@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://curl.se/download/curl-8.21.0.tar.xz"
-sha256 = ""
+sha256 = "aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6"
 
 dependencies = [
     "openssl-libs >= 4.0.1",

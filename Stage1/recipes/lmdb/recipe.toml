@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/LMDB/lmdb/archive/refs/tags/LMDB_0.9.33.tar.gz"
-sha256 = ""
+sha256 = "9c352fa9bdad53d920128ac6a62296f2850c7e29862a610d3a72f5f49a1cd7ea"
 
 dependencies = [
 ]

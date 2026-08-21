@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://github.com/seccomp/libseccomp/releases/download/v2.5.6/libseccomp-2.5.6.tar.gz"
-sha256 = ""
+sha256 = "04c37d72965dce218a0c94519b056e1775cf786b5260ee2b7992956c4ee38633"
 
 dependencies = [
 ]

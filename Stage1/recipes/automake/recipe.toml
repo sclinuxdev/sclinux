@@ -10,7 +10,7 @@ channel = "system"
 
 [source]
 url = "https://ftpmirror.gnu.org/automake/automake-1.18.1.tar.xz"
-sha256 = ""
+sha256 = "168aa363278351b89af56684448f525a5bce5079d0b6842bd910fdd3f1646887"
 
 dependencies = [
 ]
