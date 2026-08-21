@@ -121,11 +121,11 @@ def main() -> int:
     containerfile = (REPO / "Stage0" / "Containerfile").read_text()
     copied = [line for line in containerfile.splitlines() if line.startswith(("COPY ", "ADD "))]
     failed += not check(
-        "Stage0 copies only the audited Sage reproducibility patch",
+        "Stage0 copies only the audited Sage bootstrap integrity patch",
         copied,
         [
-            "COPY Stage1/recipes/sage/sage-reproducible-archives.patch "
-            "/tmp/sage-reproducible-archives.patch"
+            "COPY Stage1/recipes/sage/sage-bootstrap-install-integrity.patch "
+            "/tmp/sage-bootstrap-install-integrity.patch"
         ],
     )
     failed += not check(
@@ -144,17 +144,25 @@ def main() -> int:
         True,
     )
     failed += not check(
-        "Stage0 applies the Sage reproducibility patch",
-        "patch -p1 < /tmp/sage-reproducible-archives.patch" in containerfile,
+        "Stage0 applies the Sage bootstrap integrity patch",
+        "patch -p1 < /tmp/sage-bootstrap-install-integrity.patch" in containerfile,
         True,
     )
     sage_patch = (
-        REPO / "Stage1" / "recipes" / "sage" / "sage-reproducible-archives.patch"
+        REPO / "Stage1" / "recipes" / "sage" / "sage-bootstrap-install-integrity.patch"
     ).read_text()
     failed += not check(
-        "Sage writes POSIX ustar headers for long payload paths",
-        'std::memcpy(hdr.magic, "ustar", 5);' in sage_patch
-        and 'std::memcpy(hdr.version, "00", 2);' in sage_patch,
+        "Sage bootstrap patch validates archive identity and ownership before extraction",
+        "std::expected<std::vector<package::PackageManifest>, std::string>" in sage_patch
+        and "std::expected<std::optional<package::PackageManifest>, std::string>" in sage_patch
+        and "inspect_package_impl" in sage_patch
+        and "normalize_data_path" in sage_patch
+        and "auto package_txn = db.begin_write_txn()" in sage_patch
+        and "escape_toml_basic_string" in sage_patch
+        and "struct PackageIdentity" in sage_patch
+        and "check_file_conflicts" in sage_patch
+        and "expected_manifest" in sage_patch
+        and "run_package_postprocessing" in sage_patch,
         True,
     )
 
@@ -226,6 +234,11 @@ def main() -> int:
         "mount procfs or empty /proc" in procfs_error,
         True,
     )
+    failed += not check(
+        "Stage1 resolves a relative workspace before invoking Sage",
+        "workspace = workspace.resolve()" in BUILD.read_text(),
+        True,
+    )
     sage_source = build.source_for_package("sage")
     failed += not check(
         "Stage0 receives the locked Sage source identity",
@@ -292,9 +305,9 @@ def main() -> int:
             canonical["source"]["sha256"],
         )
         failed += not check(
-            "Stage1 Sage applies the same reproducibility patch",
+            "Stage1 Sage applies the same bootstrap integrity patch",
             rendered["package"]["prepare"],
-            ['patch -p1 < "$RECIPE_DIR/sage-reproducible-archives.patch"'],
+            ['patch -p1 < "$RECIPE_DIR/sage-bootstrap-install-integrity.patch"'],
         )
         failed += not check(
             "Stage1 Sage passes the isolated sysroot to xmake links",
@@ -376,6 +389,43 @@ def main() -> int:
             "--with-bcrypt --with-yescrypt" in shadow["source"]["build"][1]
             and "--with-{b,yes}crypt" not in shadow["source"]["build"][1],
             True,
+        )
+        split_cleanup_expectations = {
+            "xz-libs": "usr/share/locale",
+            "ncurses-libs": "usr/share/terminfo",
+            "pcre2-libs": "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/share",
+            "util-linux-libs": "libsmartcols.la",
+            "e2fsprogs-libs": "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/share",
+            "e2fsprogs": "libe2p.*",
+            "file-libs": "rm -rf $DESTDIR/usr/share",
+            "openssl-libs": "usr/lib/cmake",
+            "openssl": "usr/lib/ossl-modules",
+            "shadow": "usr/sbin/nologin",
+            "man-pages": "crypt_r.3",
+            "mkinitcpio": "etc/mkinitcpio.conf",
+            "inetutils": "man/man1/hostname.1",
+            "tcl": "Tcl_Thread.3",
+        }
+        failed += not check(
+            "Stage1 split-package recipes remove every audited ownership overlap",
+            all(
+                expected
+                in " ".join(
+                    build.tomllib.loads(
+                        (REPO / "Stage1" / "recipes" / name / "recipe.toml").read_text()
+                    )["source"]["install"]
+                )
+                for name, expected in split_cleanup_expectations.items()
+            ),
+            True,
+        )
+        ncurses_libs_install = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "ncurses-libs" / "recipe.toml").read_text()
+        )["source"]["install"]
+        failed += not check(
+            "Stage1 ncurses libraries skip the discarded terminfo install",
+            ncurses_libs_install[0],
+            "make install.libs install.includes DESTDIR=$DESTDIR",
         )
         kmod = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "kmod" / "recipe.toml").read_text()
@@ -790,6 +840,22 @@ def main() -> int:
             ["runtime.so"],
         )
 
+        native_recipe = Path(directory) / "native-recipe"
+        native_binary = native_recipe / "pkg/usr/bin/example"
+        native_binary.parent.mkdir(parents=True)
+        native_binary.write_text("#!/usr/bin/sh\n")
+        native_validation_error = ""
+        try:
+            build.validate_stage1_package_paths(native_recipe, [Path("/")])
+            build.validate_stage1_package_shebangs(native_recipe, [Path("/")])
+        except build.ConfigError as exc:
+            native_validation_error = str(exc)
+        failed += not check(
+            "Stage1 accepts the native root without disabling workspace leak checks",
+            native_validation_error,
+            "",
+        )
+
         sysroot_binary = sysroot_library.parent / "bin/pkgconf"
         sysroot_binary.parent.mkdir(parents=True)
         sysroot_binary.write_bytes(b"\x7fELFfixture")
@@ -853,7 +919,9 @@ def main() -> int:
         xmake_wrapper = (tool_wrapper_root / "xmake-bin/xmake").read_text()
         failed += not check(
             "Stage1 xmake wrapper preserves its installed module root",
-            f"--argv0 {xmake_binary} " in xmake_wrapper,
+            f"--argv0 {xmake_binary} " in xmake_wrapper
+            and f"export XMAKE_PROGRAM_DIR={sysroot_library.parents[1].resolve() / 'opt/channels/xmake/3/share/xmake'}"
+            in xmake_wrapper,
             True,
         )
         failed += not check(
@@ -1099,7 +1167,7 @@ def main() -> int:
         [],
     )
 
-    total = 86
+    total = 90
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 

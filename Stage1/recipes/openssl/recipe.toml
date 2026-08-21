@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "openssl"
 version = "4.0.1"
-release = "2"
+release = "3"
 description = "TLS/SSL command-line tools and configuration (openssl CLI, /etc/ssl)"
 license = "Apache-2.0"
 channel = "system"
@@ -38,5 +38,5 @@ install = [
     # 拆分：运行库归 openssl-libs，头文件/pc/符号链接归 openssl-dev
     "rm -rf $DESTDIR/usr/include",
     "rm -f $DESTDIR/usr/lib/libssl.so* $DESTDIR/usr/lib/libcrypto.so*",
-    "rm -rf $DESTDIR/usr/lib/pkgconfig",
+    "rm -rf $DESTDIR/usr/lib/pkgconfig $DESTDIR/usr/lib/cmake $DESTDIR/usr/lib/ossl-modules",
 ]

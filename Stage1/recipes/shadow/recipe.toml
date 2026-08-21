@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "shadow"
 version = "4.20.2"
-release = "2"
+release = "3"
 description = "Password and account management utilities (passwd, useradd, login, su, ...)"
 license = "BSD-3-Clause"
 channel = "system"
@@ -37,4 +37,5 @@ build = [
 install = [
     "make exec_prefix=/usr install DESTDIR=$DESTDIR",
     "make -C man install-man DESTDIR=$DESTDIR",
+    "rm -f $DESTDIR/usr/sbin/nologin $DESTDIR/usr/share/man/man8/nologin.8*",
 ]

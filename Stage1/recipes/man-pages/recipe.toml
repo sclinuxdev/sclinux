@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "man-pages"
 version = "6.18"
-release = "1"
+release = "2"
 description = "Linux man pages (documentation data)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -30,4 +30,5 @@ build = [
 
 install = [
     "make -R -j1 prefix=/usr install DESTDIR=$DESTDIR",
+    "rm -f $DESTDIR/usr/share/man/man3/crypt.3* $DESTDIR/usr/share/man/man3/crypt_r.3*",
 ]

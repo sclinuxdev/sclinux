@@ -717,7 +717,10 @@ def validate_stage1_package_paths(
 ) -> None:
     package_root = recipe_dir / "pkg"
     for root in forbidden_roots:
-        relative = Path(*root.resolve().parts[1:])
+        resolved = root.resolve()
+        if resolved == Path("/"):
+            continue
+        relative = Path(*resolved.parts[1:])
         leaked = package_root / relative
         if leaked.exists():
             raise ConfigError(f"Stage1 package payload contains a build path: {leaked}")
@@ -728,6 +731,7 @@ def validate_stage1_package_shebangs(recipe_dir: Path, forbidden_roots: list[Pat
     forbidden = {
         os.fsencode(str(candidate))
         for root in forbidden_roots
+        if root.resolve() != Path("/")
         for candidate in (root, root.resolve())
     }
     if not package_root.is_dir():
@@ -815,8 +819,17 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
                 if wrapper_name in {"gcc-bin", "gcc-libexec", "xmake-bin"}
                 else '"$0"'
             )
+            wrapper_environment = ""
+            if wrapper_name == "xmake-bin":
+                xmake_program_dir = resolved_sysroot / "opt/channels/xmake/3/share/xmake"
+                wrapper_environment = (
+                    'if [ -z "${XMAKE_PROGRAM_DIR:-}" ]; then\n'
+                    f"    export XMAKE_PROGRAM_DIR={shlex.quote(str(xmake_program_dir))}\n"
+                    "fi\n"
+                )
             wrapper.write_text(
                 "#!/bin/sh\n"
+                f"{wrapper_environment}"
                 f"exec {shlex.quote(stage1_dynamic_loader(architecture, sysroot))} "
                 f"--library-path {shlex.quote(library_path)} "
                 f"--argv0 {argv0} "
@@ -862,6 +875,9 @@ def run_stage1_packages(
     sysroot: Path | None = None,
 ) -> list[dict]:
     validate_stage1_procfs()
+    workspace = workspace.resolve()
+    if sysroot is not None:
+        sysroot = sysroot.resolve()
     manifest = load_stage1_manifest()
     packages = select_stage1_packages(manifest, first, last)
     recipes = workspace / "recipes"

@@ -1,0 +1,1927 @@
+diff --git a/src/cli/main.cpp b/src/cli/main.cpp
+index 5596e76..84e4f6b 100644
+--- a/src/cli/main.cpp
++++ b/src/cli/main.cpp
+@@ -226,10 +226,16 @@ int cmd_install(const CliOptions& opts) {
+         return 1;
+     }
+     auto& db = *db_res;
++    auto installed_res = db.list_installed_packages();
++    if (!installed_res) {
++        sage::util::log_error("Installed package database is inconsistent: {}", installed_res.error());
++        return 1;
++    }
++    auto installed_packages = std::move(*installed_res);
+ 
+     // 1. Gather Available Package Pool from Channels and Local Repos
+     std::vector<sage::package::PackageManifest> pool;
+-    std::map<std::string, std::filesystem::path> package_archive_map;
++    std::map<sage::package::PackageIdentity, std::filesystem::path> package_archive_map;
+ 
+     for (const auto& ch_cfg : cfg.channels) {
+         if (!ch_cfg.enabled) continue;
+@@ -260,7 +266,7 @@ int cmd_install(const CliOptions& opts) {
+                 if (!std::filesystem::exists(local_p)) {
+                     local_p = dir_base / std::format("{}-{}.pkg.tar.zst", pkg.name, pkg.version.ver);
+                 }
+-                package_archive_map[pkg.name] = local_p;
++                package_archive_map[sage::package::package_identity(pkg)] = local_p;
+             }
+         }
+     }
+@@ -269,21 +275,37 @@ int cmd_install(const CliOptions& opts) {
+     // (e.g. glibc providing so:libc.so.6) satisfy dependencies during bootstrap,
+     // when the repository may not yet contain the providing package. Candidates
+     // that are already installed are filtered out after solving.
+-    for (auto& pkg : db.list_installed_packages()) {
+-        pool.push_back(std::move(pkg));
++    for (const auto& pkg : installed_packages) {
++        pool.push_back(pkg);
+     }
+ 
+     // Check if any arguments are direct .pkg.tar.zst archive files
+     std::vector<sage::package::Dependency> root_reqs;
++    std::unordered_set<std::string> direct_package_names;
+     for (const auto& arg : opts.args) {
+         if (arg.ends_with(".pkg.tar.zst") && std::filesystem::exists(arg)) {
+-            auto ext_res = sage::archive::extract_package(arg, std::filesystem::temp_directory_path() / "sage_probe");
+-            std::filesystem::remove_all(std::filesystem::temp_directory_path() / "sage_probe");
+-            if (ext_res) {
+-                pool.push_back(ext_res->manifest);
+-                package_archive_map[ext_res->manifest.name] = std::filesystem::absolute(arg);
+-                root_reqs.push_back(sage::package::Dependency::parse(ext_res->manifest.name));
++            auto inspect_res = sage::archive::inspect_package(arg);
++            if (!inspect_res) {
++                sage::util::log_error("Invalid package archive '{}': {}", arg, inspect_res.error());
++                return 1;
+             }
++            if (!direct_package_names.insert(inspect_res->manifest.name).second) {
++                sage::util::log_error(
++                    "Multiple direct archives were provided for package '{}'",
++                    inspect_res->manifest.name);
++                return 1;
++            }
++            std::erase_if(pool, [&](const auto& candidate) {
++                return candidate.name == inspect_res->manifest.name;
++            });
++            pool.push_back(inspect_res->manifest);
++            package_archive_map[sage::package::package_identity(inspect_res->manifest)] =
++                std::filesystem::absolute(arg);
++            root_reqs.push_back(sage::package::Dependency{
++                .name = inspect_res->manifest.name,
++                .op = sage::package::ConstraintOp::Equal,
++                .version = inspect_res->manifest.version,
++            });
+         } else {
+             root_reqs.push_back(sage::package::Dependency::parse(arg));
+         }
+@@ -310,7 +332,7 @@ int cmd_install(const CliOptions& opts) {
+     // may have selected them as candidates. Only repo-newer versions are installed
+     // (upgrades); everything else is already satisfied by the current system.
+     std::unordered_map<std::string, sage::package::PackageManifest> installed_by_name;
+-    for (auto& p : db.list_installed_packages()) {
++    for (auto& p : installed_packages) {
+         installed_by_name.emplace(p.name, std::move(p));
+     }
+     std::vector<sage::package::PackageManifest> to_install;
+@@ -359,10 +381,28 @@ int cmd_install(const CliOptions& opts) {
+         return 0;
+     }
+ 
+-    auto wtxn = db.begin_write_txn();
+-    if (!wtxn) {
+-        sage::util::log_error("Failed to open database write transaction: {}", wtxn.error());
+-        return 1;
++    std::map<sage::package::PackageIdentity, sage::archive::InspectedPackage> inspected_packages;
++    for (const auto& pkg : unique_to_install) {
++        const auto identity = sage::package::package_identity(pkg);
++        auto archive_it = package_archive_map.find(identity);
++        if (archive_it == package_archive_map.end() || !std::filesystem::exists(archive_it->second)) {
++            sage::util::log_error("Package archive for '{}' not found at {}", pkg.name,
++                (archive_it != package_archive_map.end()) ? archive_it->second.string() : "<unknown>");
++            return 1;
++        }
++        auto inspect_res = sage::archive::inspect_package(archive_it->second);
++        if (!inspect_res) {
++            sage::util::log_error(
++                "Invalid package archive for '{}': {}", pkg.name, inspect_res.error());
++            return 1;
++        }
++        if (sage::package::package_identity(inspect_res->manifest) != identity) {
++            sage::util::log_error(
++                "Package archive identity does not match selected package '{} {} [{}; {}]'",
++                pkg.name, pkg.version.to_string(), pkg.arch, pkg.channel);
++            return 1;
++        }
++        inspected_packages.emplace(identity, std::move(*inspect_res));
+     }
+ 
+     // Self-heal: prune file registrations owned by packages that are no longer
+@@ -372,26 +412,78 @@ int cmd_install(const CliOptions& opts) {
+     for (const auto& [name, _] : installed_by_name) {
+         installed_names.insert(name);
+     }
+-    auto pruned = db.prune_orphaned_files(*wtxn, installed_names);
++    auto prune_txn = db.begin_write_txn();
++    if (!prune_txn) {
++        sage::util::log_error("Failed to open orphan-pruning transaction: {}", prune_txn.error());
++        return 1;
++    }
++    auto pruned = db.prune_orphaned_files(*prune_txn, installed_names);
++    auto prune_commit = prune_txn->commit();
++    if (!prune_commit) {
++        sage::util::log_error("Failed to commit orphan-pruning transaction: {}", prune_commit.error());
++        return 1;
++    }
+     if (pruned > 0) {
+         sage::util::log_info("  ~ pruned {} orphaned file registration(s)", pruned);
+     }
+ 
++    std::vector<sage::channel::Channel> active_channels;
++    for (const auto& ch_cfg : cfg.channels) {
++        sage::channel::Channel ch;
++        ch.name = ch_cfg.name;
++        ch.scope = sage::channel::parse_scope(ch_cfg.scope);
++        ch.enabled = ch_cfg.enabled;
++        active_channels.push_back(std::move(ch));
++    }
++    std::set<std::pair<std::string, std::string>> activated_toolchains;
+     std::vector<sage::package::FileEntry> all_installed_files;
+ 
++    auto run_package_postprocessing = [&](const sage::package::PackageManifest& installed_pkg) {
++        auto spec = sage::channel::SubChannelSpec::parse(installed_pkg.channel);
++        if (spec.scope == sage::channel::ChannelScope::Toolchain
++            && !spec.category.empty() && !spec.slot.empty()) {
++            auto key = std::make_pair(spec.category, spec.slot);
++            if (activated_toolchains.insert(key).second) {
++                auto act_res = sage::channel::ProfileManager::switch_active_toolchain(
++                    opts.target_root, spec.category, spec.slot);
++                if (!act_res) {
++                    sage::util::log_warn(
++                        "Failed to activate toolchain '{}:{}': {}",
++                        spec.category, spec.slot, act_res.error());
++                }
++            }
++        }
++
++        (void)sage::channel::ProfileManager::regenerate_fhs_profile(
++            opts.target_root, active_channels);
++        sage::rebuild::TriggerEngine::run_post_transaction_triggers(
++            opts.target_root, installed_pkg.files);
++    };
++
+     // 3. Streaming Unpack & LMDB State Registration
+     for (const auto& pkg : unique_to_install) {
+-        auto archive_it = package_archive_map.find(pkg.name);
+-        if (archive_it == package_archive_map.end() || !std::filesystem::exists(archive_it->second)) {
+-            sage::util::log_error("Package archive for '{}' not found at {}", pkg.name, 
+-                (archive_it != package_archive_map.end()) ? archive_it->second.string() : "<unknown>");
++        const auto identity = sage::package::package_identity(pkg);
++        auto archive_it = package_archive_map.find(identity);
++        auto inspected_it = inspected_packages.find(identity);
++        auto package_txn = db.begin_write_txn();
++        if (!package_txn) {
++            sage::util::log_error("Failed to open database transaction for '{}': {}", pkg.name, package_txn.error());
++            return 1;
++        }
++
++        auto conflict_res = db.check_file_conflicts(
++            *package_txn, pkg.name, inspected_it->second.data_files);
++        if (!conflict_res) {
++            sage::util::log_error(
++                "Cannot install package '{}': {}", pkg.name, conflict_res.error());
+             return 1;
+         }
+ 
+         // Archives always contain paths relative to sysroot (e.g. usr/bin/bash or
+         // opt/channels/gcc/15/bin/gcc), so always extract to the target root directly.
+         sage::util::log_info("Unpacking {} -> {}...", pkg.name, opts.target_root.string());
+-        auto ext_res = sage::archive::extract_package(archive_it->second, opts.target_root);
++        auto ext_res = sage::archive::extract_package(
++            archive_it->second, opts.target_root, &pkg);
+         if (!ext_res) {
+             sage::util::log_error("Failed to extract package '{}': {}", pkg.name, ext_res.error());
+             return 1;
+@@ -427,67 +519,46 @@ int cmd_install(const CliOptions& opts) {
+                 stale.push_back(std::move(fe));
+             }
+             if (!stale.empty()) {
+-                (void)db.unregister_files(*wtxn, stale, my_owner);
++                (void)db.unregister_files(*package_txn, stale, my_owner);
+                 sage::util::log_info("  ~ removed {} stale file(s) from previous {} {}", 
+                     stale.size(), pkg.name, old_it->second.version.to_string());
+             }
+         }
+ 
+-        auto p_res = db.put_package(*wtxn, installed_pkg);
++        auto p_res = db.put_package(*package_txn, installed_pkg);
+         if (!p_res) {
+             sage::util::log_error("Failed to register package '{}' in DB: {}", installed_pkg.name, p_res.error());
+             return 1;
+         }
+-        auto f_res = db.register_files(*wtxn, installed_pkg.name, installed_pkg.channel, installed_pkg.files);
++        auto f_res = db.register_files(*package_txn, installed_pkg.name, installed_pkg.channel, installed_pkg.files);
+         if (!f_res) {
+             sage::util::log_error("Failed to register files for '{}': {}", installed_pkg.name, f_res.error());
+             return 1;
+         }
+-        auto prov_res = db.register_provides(*wtxn, installed_pkg.name, installed_pkg.provides);
++        auto prov_res = db.register_provides(*package_txn, installed_pkg.name, installed_pkg.provides);
+         if (!prov_res) {
+             sage::util::log_error("Failed to register provides for '{}': {}", installed_pkg.name, prov_res.error());
+             return 1;
+         }
+ 
+-        all_installed_files.insert(all_installed_files.end(), installed_pkg.files.begin(), installed_pkg.files.end());
+-    }
+-
+-    auto commit_res = wtxn->commit();
+-    if (!commit_res) {
+-        sage::util::log_error("Failed to commit database transaction: {}", commit_res.error());
+-        return 1;
+-    }
+-
+-    // 4. Auto-activate installed toolchain channels
+-    std::set<std::pair<std::string, std::string>> activated_toolchains;
+-    for (const auto& pkg : unique_to_install) {
+-        auto spec = sage::channel::SubChannelSpec::parse(pkg.channel);
+-        if (spec.scope == sage::channel::ChannelScope::Toolchain && !spec.category.empty() && !spec.slot.empty()) {
+-            auto key = std::make_pair(spec.category, spec.slot);
+-            if (activated_toolchains.insert(key).second) {
+-                auto act_res = sage::channel::ProfileManager::switch_active_toolchain(opts.target_root, spec.category, spec.slot);
+-                if (!act_res) {
+-                    sage::util::log_warn("Failed to activate toolchain '{}:{}': {}", spec.category, spec.slot, act_res.error());
+-                }
+-            }
++        auto package_commit = package_txn->commit();
++        if (!package_commit) {
++            sage::util::log_error("Failed to commit package '{}': {}", installed_pkg.name, package_commit.error());
++            return 1;
+         }
+-    }
+ 
+-    // 5. Regenerate FHS profile for all active channels
+-    std::vector<sage::channel::Channel> active_channels;
+-    for (const auto& ch_cfg : cfg.channels) {
+-        sage::channel::Channel ch;
+-        ch.name = ch_cfg.name;
+-        ch.scope = sage::channel::parse_scope(ch_cfg.scope);
+-        ch.enabled = ch_cfg.enabled;
+-        active_channels.push_back(std::move(ch));
++        // A later package may fail, so complete all post-processing for this
++        // committed package before advancing to the next archive.
++        run_package_postprocessing(installed_pkg);
++        all_installed_files.insert(
++            all_installed_files.end(), installed_pkg.files.begin(), installed_pkg.files.end());
+     }
+-    (void)sage::channel::ProfileManager::regenerate_fhs_profile(opts.target_root, active_channels);
+ 
+-    // 6. Post-Transaction File Triggers (ldconfig, ca-certificates, mime).
+-    // Runs AFTER toolchain activation so freshly written
+-    // /etc/ld.so.conf.d/sage-*.conf entries are picked up by ldconfig.
+-    sage::rebuild::TriggerEngine::run_post_transaction_triggers(opts.target_root, all_installed_files);
++    // Re-run the aggregate triggers after a fully successful transaction set:
++    // a trigger tool may itself have been installed after an earlier package
++    // first requested it.
++    sage::rebuild::TriggerEngine::run_post_transaction_triggers(
++        opts.target_root, all_installed_files);
+ 
+     sage::util::log_success("Successfully installed {} packages into {}", unique_to_install.size(), opts.target_root.string());
+     return 0;
+@@ -518,8 +589,12 @@ int cmd_remove(const CliOptions& opts) {
+     auto& db = *db_res;
+ 
+     auto all_installed = db.list_installed_packages();
++    if (!all_installed) {
++        sage::util::log_error("Installed package database is inconsistent: {}", all_installed.error());
++        return 1;
++    }
+     std::map<std::string, sage::package::PackageManifest> installed_map;
+-    for (const auto& pkg : all_installed) {
++    for (const auto& pkg : *all_installed) {
+         installed_map[pkg.name] = pkg;
+     }
+ 
+@@ -790,6 +865,8 @@ int cmd_remove(const CliOptions& opts) {
+ // Other Commands & Test Suite
+ // ============================================================================
+ 
++int cmd_query(const CliOptions& opts);
++
+ int cmd_test_suite() {
+     sage::util::log_info("Running Sage Master Architecture & Subsystem Integration Test Suite...");
+ 
+@@ -838,7 +915,7 @@ int cmd_test_suite() {
+     sage::package::PackageManifest manifest;
+     manifest.name = "dummy-tool";
+     manifest.version = sage::package::Version::parse("1.0.0-1");
+-    manifest.description = "Test mock tool";
++    manifest.description = "Test \"mock\" tool with \\ path";
+     manifest.license = "BSD-2-Clause";
+     manifest.channel = "system";
+ 
+@@ -884,11 +961,13 @@ int cmd_test_suite() {
+         return 1;
+     }
+ 
++    auto malformed_archive_dir = temp_dir / "malformed-archives";
++    std::filesystem::create_directories(malformed_archive_dir);
+     auto unrepresentable_root = temp_dir / "unrepresentable-path";
+     std::filesystem::create_directories(unrepresentable_root);
+     std::ofstream(unrepresentable_root / std::string(101, 'c')) << "must fail\n";
+     auto unrepresentable_res = sage::archive::create_package(
+-        manifest, unrepresentable_root, temp_dir / "unrepresentable-path.pkg.tar.zst");
++        manifest, unrepresentable_root, malformed_archive_dir / "unrepresentable-path.pkg.tar.zst");
+     if (unrepresentable_res || unrepresentable_res.error().find("Path cannot be represented") == std::string::npos) {
+         sage::util::log_error("Unrepresentable USTAR path was silently accepted");
+         return 1;
+@@ -903,7 +982,7 @@ int cmd_test_suite() {
+         return 1;
+     }
+     auto long_link_res = sage::archive::create_package(
+-        manifest, long_link_root, temp_dir / "long-link-target.pkg.tar.zst");
++        manifest, long_link_root, malformed_archive_dir / "long-link-target.pkg.tar.zst");
+     if (long_link_res || long_link_res.error().find("Link target cannot be represented") == std::string::npos) {
+         sage::util::log_error("Unrepresentable USTAR link target was silently accepted");
+         return 1;
+@@ -920,6 +999,140 @@ int cmd_test_suite() {
+         return 1;
+     }
+ 
++    auto conflict_root = temp_dir / "conflict-sysroot";
++    std::filesystem::create_directories(conflict_root / "usr/bin/link");
++    std::ofstream(conflict_root / "usr/bin/link/keep") << "must survive\n";
++    auto conflict_res = sage::archive::extract_package(pkg_path, conflict_root);
++    if (conflict_res
++        || !std::filesystem::exists(conflict_root / "usr/bin/link/keep")
++        || std::filesystem::exists(conflict_root / "usr/bin/dummy")
++        || std::filesystem::exists(conflict_root / long_rel)) {
++        sage::util::log_error("Archive path-type conflict was not reported safely");
++        return 1;
++    }
++
++    std::ifstream raw_tar_bytes_in(raw_tar_path, std::ios::binary);
++    std::vector<std::uint8_t> raw_tar_bytes(
++        std::istreambuf_iterator<char>(raw_tar_bytes_in), {});
++    auto find_tar_header = [&](const std::vector<std::uint8_t>& bytes, std::string_view wanted)
++        -> std::optional<size_t> {
++        size_t offset = 0;
++        while (offset + sizeof(sage::archive::TarHeader) <= bytes.size()) {
++            sage::archive::TarHeader header{};
++            std::memcpy(&header, bytes.data() + offset, sizeof(header));
++            bool all_zero = std::ranges::all_of(
++                std::span(bytes.data() + offset, sizeof(header)),
++                [](std::uint8_t byte) { return byte == 0; });
++            if (all_zero) break;
++
++            const auto bounded_string = [](const char* data, size_t size) {
++                return std::string(data, std::find(data, data + size, '\0'));
++            };
++            std::string name;
++            if (header.prefix[0] != '\0') {
++                name = bounded_string(header.prefix, sizeof(header.prefix)) + "/";
++            }
++            name += bounded_string(header.name, sizeof(header.name));
++            if (name == wanted) return offset;
++
++            auto size = sage::archive::parse_octal(header.size, sizeof(header.size));
++            offset += sizeof(header) + static_cast<size_t>(((size + 511) / 512) * 512);
++        }
++        return std::nullopt;
++    };
++    auto write_mutated_package = [&](const std::vector<std::uint8_t>& bytes, std::string_view stem)
++        -> std::optional<std::filesystem::path> {
++        auto tar_path = malformed_archive_dir / (std::string(stem) + ".tar");
++        auto archive_path = malformed_archive_dir / (std::string(stem) + ".pkg.tar.zst");
++        std::ofstream tar_out(tar_path, std::ios::binary);
++        tar_out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
++        tar_out.close();
++        auto command = std::format("zstd -q -f \"{}\" -o \"{}\"", tar_path.string(), archive_path.string());
++        if (std::system(command.c_str()) != 0) return std::nullopt;
++        return archive_path;
++    };
++    auto rename_tar_entry = [&](std::vector<std::uint8_t>& bytes,
++                                std::string_view old_name,
++                                std::string_view new_name) -> bool {
++        auto offset = find_tar_header(bytes, old_name);
++        if (!offset || new_name.size() > 100) return false;
++        sage::archive::TarHeader header{};
++        std::memcpy(&header, bytes.data() + *offset, sizeof(header));
++        std::memset(header.name, 0, sizeof(header.name));
++        std::memset(header.prefix, 0, sizeof(header.prefix));
++        std::memcpy(header.name, new_name.data(), new_name.size());
++        sage::archive::write_tar_checksum(
++            header.chksum, sage::archive::compute_tar_checksum(header));
++        std::memcpy(bytes.data() + *offset, &header, sizeof(header));
++        return true;
++    };
++
++    auto invalid_manifest_bytes = raw_tar_bytes;
++    auto manifest_header = find_tar_header(invalid_manifest_bytes, ".METADATA/manifest.toml");
++    if (!manifest_header) {
++        sage::util::log_error("Failed to locate manifest test fixture");
++        return 1;
++    }
++    invalid_manifest_bytes[*manifest_header + sizeof(sage::archive::TarHeader)] = '@';
++    auto invalid_manifest_pkg = write_mutated_package(invalid_manifest_bytes, "invalid-manifest");
++    auto invalid_manifest_root = temp_dir / "invalid-manifest-root";
++    auto invalid_manifest_result = invalid_manifest_pkg
++        ? sage::archive::extract_package(*invalid_manifest_pkg, invalid_manifest_root)
++        : std::expected<sage::archive::ExtractedPackage, std::string>(std::unexpected("fixture failed"));
++    if (invalid_manifest_result
++        || std::filesystem::exists(invalid_manifest_root / "usr/bin/dummy")
++        || std::filesystem::exists(invalid_manifest_root / long_rel)) {
++        sage::util::log_error("Invalid manifest was rejected only after writing package files");
++        return 1;
++    }
++
++    auto traversal_bytes = raw_tar_bytes;
++    if (!rename_tar_entry(
++            traversal_bytes, "data/usr/bin/dummy", "data/../../escaped-by-package")) {
++        sage::util::log_error("Failed to create path traversal test fixture");
++        return 1;
++    }
++    auto traversal_pkg = write_mutated_package(traversal_bytes, "path-traversal");
++    auto traversal_root = temp_dir / "path-traversal-root/inner";
++    auto escaped_path = temp_dir / "escaped-by-package";
++    auto traversal_result = traversal_pkg
++        ? sage::archive::extract_package(*traversal_pkg, traversal_root)
++        : std::expected<sage::archive::ExtractedPackage, std::string>(std::unexpected("fixture failed"));
++    if (traversal_result || std::filesystem::exists(escaped_path)) {
++        sage::util::log_error("Package data path escaped the target root");
++        return 1;
++    }
++
++    auto symlink_pivot_bytes = raw_tar_bytes;
++    if (!rename_tar_entry(
++            symlink_pivot_bytes, "data/usr/bin/dummy", "data/usr/bin/link/escape")) {
++        sage::util::log_error("Failed to create archive symlink traversal fixture");
++        return 1;
++    }
++    auto symlink_pivot_pkg = write_mutated_package(symlink_pivot_bytes, "symlink-pivot");
++    auto symlink_pivot_root = temp_dir / "symlink-pivot-root";
++    auto symlink_pivot_result = symlink_pivot_pkg
++        ? sage::archive::extract_package(*symlink_pivot_pkg, symlink_pivot_root)
++        : std::expected<sage::archive::ExtractedPackage, std::string>(std::unexpected("fixture failed"));
++    if (symlink_pivot_result
++        || std::filesystem::exists(symlink_pivot_root / long_rel)
++        || std::filesystem::exists(symlink_pivot_root / "usr/bin/link")) {
++        sage::util::log_error("Archive symlink parent traversal was not rejected before extraction");
++        return 1;
++    }
++
++    auto existing_symlink_root = temp_dir / "existing-symlink-root";
++    auto outside_symlink_target = temp_dir / "outside-symlink-target";
++    std::filesystem::create_directories(existing_symlink_root);
++    std::filesystem::create_directories(outside_symlink_target);
++    std::filesystem::create_directory_symlink(outside_symlink_target, existing_symlink_root / "usr");
++    auto outside_dummy = outside_symlink_target / "bin/dummy";
++    auto existing_symlink_result = sage::archive::extract_package(pkg_path, existing_symlink_root);
++    if (existing_symlink_result || std::filesystem::exists(outside_dummy)) {
++        sage::util::log_error("Existing target symlink escaped the target root");
++        return 1;
++    }
++
+     auto verify_tar_reader = [&](std::string_view reader, const std::filesystem::path& root) {
+         std::filesystem::create_directories(root);
+         auto command = std::format("{} -xf \"{}\" -C \"{}\"", reader, pkg_path.string(), root.string());
+@@ -1121,6 +1334,17 @@ install = [
+         sage::util::log_error("Dependency & Toolchain MSRV solver test failed (resolved size: {})", solve_res ? solve_res->size() : 0);
+         return 1;
+     }
++    auto dependency_before = [&](std::string_view dependency, std::string_view dependent) {
++        auto dependency_it = std::ranges::find(*solve_res, dependency, &sage::package::PackageManifest::name);
++        auto dependent_it = std::ranges::find(*solve_res, dependent, &sage::package::PackageManifest::name);
++        return dependency_it != solve_res->end()
++            && dependent_it != solve_res->end()
++            && dependency_it < dependent_it;
++    };
++    if (!dependency_before("libfoo", "demo-app") || !dependency_before("gcc", "demo-app")) {
++        sage::util::log_error("Dependency solver did not return dependency-first install order");
++        return 1;
++    }
+     sage::util::log_success("3. Native PubGrub / CDCL SAT Dependency & MSRV Solver OK");
+ 
+     // 4. Multi-Init Universal Service Generation Test
+@@ -1144,6 +1368,103 @@ install = [
+         return 1;
+     }
+ 
++    sage::package::PackageManifest escaped_manifest;
++    escaped_manifest.name = "escaped-metadata";
++    escaped_manifest.version = sage::package::Version::parse("1.0.0-1");
++    escaped_manifest.description = "quoted \"value\" with \\ slash\nnext line";
++    sage::package::FileEntry escaped_file;
++    escaped_file.path = R"(usr/lib/systemd/system/system-systemd\x2dmute.slice)";
++    escaped_manifest.files.push_back(std::move(escaped_file));
++    auto escaped_round_trip = sage::package::PackageManifest::parse_toml(escaped_manifest.serialize_toml());
++    if (!escaped_round_trip
++        || escaped_round_trip->description != escaped_manifest.description
++        || escaped_round_trip->files.size() != 1
++        || escaped_round_trip->files.front().path != escaped_manifest.files.front().path) {
++        sage::util::log_error("Package metadata TOML escaping round-trip failed");
++        return 1;
++    }
++
++    sage::package::FileEntry owned_file;
++    owned_file.path = "usr/bin/database-owned";
++    {
++        auto owner_txn = db_res->begin_write_txn();
++        if (!owner_txn
++            || !db_res->register_files(*owner_txn, "database-owner", "system", {owned_file})
++            || !owner_txn->commit()) {
++            sage::util::log_error("Failed to create database file ownership fixture");
++            return 1;
++        }
++    }
++    sage::package::FileEntry unowned_file;
++    unowned_file.path = "usr/bin/database-unowned";
++    bool database_conflict_rejected = false;
++    {
++        auto conflict_txn = db_res->begin_write_txn();
++        if (!conflict_txn) {
++            sage::util::log_error("Failed to open database file conflict transaction");
++            return 1;
++        }
++        auto conflict_registration = db_res->register_files(
++            *conflict_txn, "database-challenger", "system", {unowned_file, owned_file});
++        database_conflict_rejected = !conflict_registration;
++    }
++    if (!database_conflict_rejected
++        || db_res->get_file_owner(owned_file.path) != "database-owner:system"
++        || db_res->get_file_owner(unowned_file.path)) {
++        sage::util::log_error("Database file conflict registration was not atomic");
++        return 1;
++    }
++
++    auto corrupt_target = temp_dir / "corrupt-target";
++    auto corrupt_db_dir = corrupt_target / "var/lib/sage";
++    {
++        auto raw_env = sage::vendor::lmdb::MdbEnv::create(corrupt_db_dir);
++        if (!raw_env) {
++            sage::util::log_error("Failed to create corrupt database fixture");
++            return 1;
++        }
++        auto raw_txn = sage::vendor::lmdb::MdbTxn::begin(*raw_env);
++        if (!raw_txn) {
++            sage::util::log_error("Failed to begin corrupt database fixture transaction");
++            return 1;
++        }
++        auto raw_packages = sage::vendor::lmdb::MdbDbi::open(
++            *raw_txn, "packages", sage::vendor::lmdb::flag_create);
++        auto raw_files = sage::vendor::lmdb::MdbDbi::open(
++            *raw_txn, "files", sage::vendor::lmdb::flag_create);
++        if (!raw_packages || !raw_files
++            || !raw_packages->put(*raw_txn, "broken", "[package]\nname = \"broken\n")
++            || !raw_files->put(*raw_txn, "usr/bin/broken", "broken:system")) {
++            sage::util::log_error("Failed to populate corrupt database fixture");
++            return 1;
++        }
++        auto raw_commit = raw_txn->commit();
++        if (!raw_commit) {
++            sage::util::log_error("Failed to commit corrupt database fixture");
++            return 1;
++        }
++    }
++    std::filesystem::create_directories(corrupt_target / "etc/sage");
++    CliOptions corrupt_install_opts;
++    corrupt_install_opts.target_root = corrupt_target;
++    corrupt_install_opts.args = {"dummy-tool"};
++    if (cmd_install(corrupt_install_opts) == 0) {
++        sage::util::log_error("Install accepted a corrupt installed package manifest");
++        return 1;
++    }
++    auto corrupt_db = sage::db::Database::open(corrupt_db_dir, true);
++    auto corrupt_package = corrupt_db
++        ? corrupt_db->get_package("broken")
++        : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++            std::unexpected("database open failed"));
++    if (!corrupt_db
++        || corrupt_db->list_installed_packages()
++        || corrupt_package
++        || corrupt_db->get_file_owner("usr/bin/broken") != "broken:system") {
++        sage::util::log_error("Corrupt manifest failure changed existing file ownership");
++        return 1;
++    }
++
+     sage::config::SystemConfig sys_cfg;
+     sys_cfg.providers["virtual/init"] = "openrc";
+     auto plan_res = sage::rebuild::ReconcileEngine::calculate_diff(*db_res, sys_cfg, repo_pool);
+@@ -1193,14 +1514,24 @@ install = [
+     sage::util::log_success("7. Ephemeral Sandboxed Shell Environment Generator (sage shell) OK");
+ 
+     // 8. Local Repository Indexing & Zero-Copy file:// Protocol Test
+-    auto idx_res = sage::archive::generate_repo_index(temp_dir, "core");
++    const std::string escaped_channel_name = "core \"quoted\" \\ channel";
++    auto idx_res = sage::archive::generate_repo_index(temp_dir, escaped_channel_name);
+     if (!idx_res || !std::filesystem::exists(temp_dir / "index.toml")) {
+         sage::util::log_error("Local repository index generation failed");
+         return 1;
+     }
+ 
+     auto fetch_res = sage::vendor::curl::fetch_string("file://" + (temp_dir / "index.toml").string());
+-    if (!fetch_res || fetch_res->find("schema_version = 1") == std::string::npos) {
++    if (!fetch_res) {
++        sage::util::log_error("Local file:// protocol fetch failed");
++        return 1;
++    }
++    auto parsed_index = sage::channel::ChannelIndex::parse_toml(*fetch_res);
++    if (fetch_res->find("schema_version = 1") == std::string::npos
++        || !parsed_index
++        || parsed_index->channel_name != escaped_channel_name
++        || parsed_index->available_packages.empty()
++        || parsed_index->available_packages.front().description != manifest.description) {
+         sage::util::log_error("Local file:// protocol fetch failed");
+         return 1;
+     }
+@@ -1230,6 +1561,277 @@ install = [
+         sage::util::log_error("End-to-end sage remove from target root failed");
+         return 1;
+     }
++
++    auto write_test_channel = [](const std::filesystem::path& target,
++                                 const std::filesystem::path& repo) {
++        std::filesystem::create_directories(target / "etc/sage");
++        std::ofstream channels(target / "etc/sage/channels.toml");
++        channels
++            << "schema_version = 1\n\n[[channels]]\nname = \"core\"\nurl = \"file://"
++            << repo.string()
++            << "\"\nscope = \"system\"\npriority = 100\nenabled = true\n";
++        return channels.good();
++    };
++    auto read_test_file = [](const std::filesystem::path& path) {
++        std::ifstream input(path, std::ios::binary);
++        return std::string(
++            std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
++    };
++
++    // A solver selection, direct archive request, and extracted archive must
++    // all refer to the same complete package identity.
++    auto version_repo = temp_dir / "version-repo";
++    auto version_1_data = temp_dir / "version-1-data";
++    auto version_2_data = temp_dir / "version-2-data";
++    std::filesystem::create_directories(version_repo);
++    std::filesystem::create_directories(version_1_data / "usr/bin");
++    std::filesystem::create_directories(version_2_data / "usr/bin");
++    std::ofstream(version_1_data / "usr/bin/versioned") << "version 1\n";
++    std::ofstream(version_2_data / "usr/bin/versioned") << "version 2\n";
++
++    sage::package::PackageManifest version_1;
++    version_1.name = "versioned-package";
++    version_1.version = sage::package::Version::parse("1.0.0-1");
++    sage::package::PackageManifest version_2 = version_1;
++    version_2.version = sage::package::Version::parse("2.0.0-1");
++    auto version_1_pkg = version_repo / "versioned-package-1.0.0-1-x86_64.pkg.tar.zst";
++    auto version_2_pkg = version_repo / "versioned-package-2.0.0-1-x86_64.pkg.tar.zst";
++    if (!sage::archive::create_package(version_1, version_1_data, version_1_pkg)
++        || !sage::archive::create_package(version_2, version_2_data, version_2_pkg)
++        || !sage::archive::generate_repo_index(version_repo, "core")) {
++        sage::util::log_error("Failed to create package identity fixtures");
++        return 1;
++    }
++
++    auto version_target = temp_dir / "version-target";
++    if (!write_test_channel(version_target, version_repo)) {
++        sage::util::log_error("Failed to write package identity test channel");
++        return 1;
++    }
++    CliOptions version_install;
++    version_install.target_root = version_target;
++    version_install.args = {"versioned-package"};
++    if (cmd_install(version_install) != 0
++        || read_test_file(version_target / "usr/bin/versioned") != "version 2\n") {
++        sage::util::log_error("Solver selection did not install the selected archive version");
++        return 1;
++    }
++    auto version_db = sage::db::Database::open(version_target / "var/lib/sage/data.mdb", true);
++    auto selected_version = version_db
++        ? version_db->get_package("versioned-package")
++        : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++            std::unexpected("database open failed"));
++    if (!selected_version || !*selected_version
++        || (**selected_version).version != version_2.version) {
++        sage::util::log_error("Installed database version differs from extracted archive version");
++        return 1;
++    }
++
++    auto direct_target = temp_dir / "direct-version-target";
++    if (!write_test_channel(direct_target, version_repo)) {
++        sage::util::log_error("Failed to write direct archive test channel");
++        return 1;
++    }
++    CliOptions direct_install;
++    direct_install.target_root = direct_target;
++    direct_install.args = {version_1_pkg.string()};
++    if (cmd_install(direct_install) != 0
++        || read_test_file(direct_target / "usr/bin/versioned") != "version 1\n") {
++        sage::util::log_error("Direct archive install was not locked to its exact version");
++        return 1;
++    }
++    {
++        auto direct_db = sage::db::Database::open(
++            direct_target / "var/lib/sage/data.mdb", true);
++        auto direct_version = direct_db
++            ? direct_db->get_package("versioned-package")
++            : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++                std::unexpected("database open failed"));
++        if (!direct_version || !*direct_version
++            || (**direct_version).version != version_1.version) {
++            sage::util::log_error("Direct archive manifest identity was not preserved in the database");
++            return 1;
++        }
++    }
++
++    // A normal same-package upgrade may replace files already owned by that
++    // package, while still selecting the exact newer archive.
++    direct_install.args = {"versioned-package"};
++    if (cmd_install(direct_install) != 0
++        || read_test_file(direct_target / "usr/bin/versioned") != "version 2\n") {
++        sage::util::log_error("Same-package upgrade was blocked or extracted the wrong archive");
++        return 1;
++    }
++    auto upgraded_db = sage::db::Database::open(
++        direct_target / "var/lib/sage/data.mdb", true);
++    auto upgraded_version = upgraded_db
++        ? upgraded_db->get_package("versioned-package")
++        : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++            std::unexpected("database open failed"));
++    if (!upgraded_version || !*upgraded_version
++        || (**upgraded_version).version != version_2.version) {
++        sage::util::log_error("Same-package upgrade did not record the extracted version");
++        return 1;
++    }
++
++    auto mismatch_repo = temp_dir / "identity-mismatch-repo";
++    std::filesystem::create_directories(mismatch_repo);
++    auto mismatch_v1 = mismatch_repo / version_1_pkg.filename();
++    auto mismatch_v2 = mismatch_repo / version_2_pkg.filename();
++    std::filesystem::copy_file(version_1_pkg, mismatch_v1);
++    std::filesystem::copy_file(version_2_pkg, mismatch_v2);
++    if (!sage::archive::generate_repo_index(mismatch_repo, "core")) {
++        sage::util::log_error("Failed to generate archive identity mismatch index");
++        return 1;
++    }
++    std::filesystem::copy_file(
++        version_1_pkg, mismatch_v2, std::filesystem::copy_options::overwrite_existing);
++    auto mismatch_target = temp_dir / "identity-mismatch-target";
++    if (!write_test_channel(mismatch_target, mismatch_repo)) {
++        sage::util::log_error("Failed to write archive identity mismatch channel");
++        return 1;
++    }
++    CliOptions mismatch_install;
++    mismatch_install.target_root = mismatch_target;
++    mismatch_install.args = {"versioned-package"};
++    if (cmd_install(mismatch_install) == 0
++        || std::filesystem::exists(mismatch_target / "usr/bin/versioned")) {
++        sage::util::log_error("Mismatched selected and archive identities mutated the target root");
++        return 1;
++    }
++
++    // Different packages must not overwrite the same ordinary file. The first
++    // package remains committed because the second fails before extraction.
++    auto owner_repo = temp_dir / "owner-conflict-repo";
++    auto owner_a_data = temp_dir / "owner-a-data";
++    auto owner_b_data = temp_dir / "owner-b-data";
++    std::filesystem::create_directories(owner_repo);
++    std::filesystem::create_directories(owner_a_data / "usr/bin");
++    std::filesystem::create_directories(owner_b_data / "usr/bin");
++    std::ofstream(owner_a_data / "usr/bin/shared-file") << "owned by A\n";
++    std::ofstream(owner_b_data / "usr/bin/shared-file") << "owned by B\n";
++    sage::package::PackageManifest owner_a;
++    owner_a.name = "owner-a";
++    owner_a.version = sage::package::Version::parse("1.0.0-1");
++    sage::package::PackageManifest owner_b;
++    owner_b.name = "owner-b";
++    owner_b.version = sage::package::Version::parse("1.0.0-1");
++    owner_b.dependencies.push_back(sage::package::Dependency::parse("owner-a"));
++    auto owner_a_pkg = owner_repo / "owner-a-1.0.0-1-x86_64.pkg.tar.zst";
++    auto owner_b_pkg = owner_repo / "owner-b-1.0.0-1-x86_64.pkg.tar.zst";
++    if (!sage::archive::create_package(owner_a, owner_a_data, owner_a_pkg)
++        || !sage::archive::create_package(owner_b, owner_b_data, owner_b_pkg)
++        || !sage::archive::generate_repo_index(owner_repo, "core")) {
++        sage::util::log_error("Failed to create file ownership conflict fixtures");
++        return 1;
++    }
++    auto owner_target = temp_dir / "owner-conflict-target";
++    if (!write_test_channel(owner_target, owner_repo)) {
++        sage::util::log_error("Failed to write file ownership conflict channel");
++        return 1;
++    }
++    CliOptions owner_install;
++    owner_install.target_root = owner_target;
++    owner_install.args = {"owner-b"};
++    if (cmd_install(owner_install) == 0) {
++        sage::util::log_error("Different packages silently overwrote the same regular file");
++        return 1;
++    }
++    auto owner_db = sage::db::Database::open(owner_target / "var/lib/sage/data.mdb", true);
++    auto owner_a_record = owner_db
++        ? owner_db->get_package("owner-a")
++        : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++            std::unexpected("database open failed"));
++    auto owner_b_record = owner_db
++        ? owner_db->get_package("owner-b")
++        : std::expected<std::optional<sage::package::PackageManifest>, std::string>(
++            std::unexpected("database open failed"));
++    if (!owner_db || !owner_a_record || !*owner_a_record
++        || !owner_b_record || *owner_b_record
++        || owner_db->get_file_owner("usr/bin/shared-file") != "owner-a:system"
++        || read_test_file(owner_target / "usr/bin/shared-file") != "owned by A\n") {
++        sage::util::log_error("File conflict changed the first package or its ownership record");
++        return 1;
++    }
++
++    auto transaction_repo = temp_dir / "transaction-repo";
++    auto transaction_a_data = temp_dir / "transaction-a-data";
++    auto transaction_b_data = temp_dir / "transaction-b-data";
++    std::filesystem::create_directories(transaction_repo);
++    std::filesystem::create_directories(transaction_a_data / "usr/bin");
++    std::ofstream(transaction_a_data / "usr/bin/transaction-a") << "committed package\n";
++    auto transaction_clang = transaction_a_data / "opt/channels/llvm/99/bin/clang";
++    std::filesystem::create_directories(transaction_clang.parent_path());
++    std::ofstream(transaction_clang) << "#!/bin/sh\nexit 0\n";
++    std::filesystem::permissions(
++        transaction_clang,
++        std::filesystem::perms::owner_all
++            | std::filesystem::perms::group_read
++            | std::filesystem::perms::group_exec
++            | std::filesystem::perms::others_read
++            | std::filesystem::perms::others_exec);
++    std::filesystem::create_directories(transaction_b_data / "usr/share");
++    std::filesystem::create_symlink("elsewhere", transaction_b_data / "usr/share/blocked");
++
++    sage::package::PackageManifest transaction_a;
++    transaction_a.name = "transaction-a";
++    transaction_a.version = sage::package::Version::parse("1.0.0-1");
++    transaction_a.channel = "toolchain/llvm:99";
++    sage::package::PackageManifest transaction_b;
++    transaction_b.name = "transaction-b";
++    transaction_b.version = sage::package::Version::parse("1.0.0-1");
++    transaction_b.channel = "system";
++    transaction_b.dependencies.push_back(sage::package::Dependency::parse("transaction-a"));
++
++    auto transaction_a_pkg = transaction_repo / "transaction-a-1.0.0-1-x86_64.pkg.tar.zst";
++    auto transaction_b_pkg = transaction_repo / "transaction-b-1.0.0-1-x86_64.pkg.tar.zst";
++    if (!sage::archive::create_package(transaction_a, transaction_a_data, transaction_a_pkg)
++        || !sage::archive::create_package(transaction_b, transaction_b_data, transaction_b_pkg)
++        || !sage::archive::generate_repo_index(transaction_repo, "core")) {
++        sage::util::log_error("Failed to create multi-package transaction fixture");
++        return 1;
++    }
++
++    auto transaction_target = temp_dir / "transaction-target";
++    std::filesystem::create_directories(transaction_target / "etc/sage");
++    std::filesystem::create_directories(transaction_target / "usr/share/blocked");
++    std::ofstream(transaction_target / "usr/share/blocked/keep") << "must survive\n";
++    std::ofstream transaction_channels(transaction_target / "etc/sage/channels.toml");
++    transaction_channels
++        << "schema_version = 1\n\n[[channels]]\nname = \"core\"\nurl = \"file://"
++        << transaction_repo.string()
++        << "\"\nscope = \"system\"\npriority = 100\nenabled = true\n";
++    transaction_channels.close();
++
++    CliOptions transaction_install;
++    transaction_install.target_root = transaction_target;
++    transaction_install.args = {"transaction-b"};
++    if (cmd_install(transaction_install) == 0) {
++        sage::util::log_error("Multi-package install accepted a later package path conflict");
++        return 1;
++    }
++    auto transaction_db = sage::db::Database::open(
++        transaction_target / "var/lib/sage/data.mdb", true);
++    if (!transaction_db) {
++        sage::util::log_error("Failed to inspect multi-package transaction database");
++        return 1;
++    }
++    auto transaction_a_record = transaction_db->get_package("transaction-a");
++    auto transaction_b_record = transaction_db->get_package("transaction-b");
++    auto transaction_cc_link = transaction_target / "etc/sage/profiles/default/bin/cc";
++    std::error_code transaction_cc_ec;
++    if (!transaction_a_record || !*transaction_a_record
++        || !transaction_b_record || *transaction_b_record
++        || !std::filesystem::exists(transaction_target / "usr/bin/transaction-a")
++        || !std::filesystem::exists(transaction_target / "usr/share/blocked/keep")
++        || !std::filesystem::is_symlink(transaction_cc_link, transaction_cc_ec)
++        || std::filesystem::read_symlink(transaction_cc_link, transaction_cc_ec)
++            != "/opt/channels/llvm/99/bin/clang"
++        || !std::filesystem::exists(transaction_target / "etc/profile.d/sage-channels.sh")) {
++        sage::util::log_error(
++            "A later package failure desynchronized an earlier committed package or skipped its post-processing");
++        return 1;
++    }
+     sage::util::log_success("9. End-to-End `sage install` & `sage remove` to Target Root OK");
+ 
+     // 10. Complete Closed-Loop: `sage build` -> `sage repo index` -> `sage install` -> `sage remove` with Orphan Cleanup
+@@ -1378,7 +1980,12 @@ install = [
+ 
+     // Verify LMDB is clean
+     auto loop_db = sage::db::Database::open(loop_target / "var/lib/sage/data.mdb");
+-    if (loop_db && !loop_db->list_installed_packages().empty()) {
++    if (!loop_db) {
++        sage::util::log_error("LMDB unavailable after cascaded removal");
++        return 1;
++    }
++    auto loop_packages = loop_db->list_installed_packages();
++    if (!loop_packages || !loop_packages->empty()) {
+         sage::util::log_error("LMDB still contains packages after cascaded removal");
+         return 1;
+     }
+@@ -1408,19 +2015,29 @@ int cmd_query(const CliOptions& opts) {
+ 
+     if (sub == "installed") {
+         auto list = db.list_installed_packages();
+-        std::println("Installed packages in '{}' ({} total):", opts.target_root.string(), list.size());
+-        for (const auto& pkg : list) {
++        if (!list) {
++            sage::util::log_error("Installed package database is inconsistent: {}", list.error());
++            return 1;
++        }
++        std::println("Installed packages in '{}' ({} total):", opts.target_root.string(), list->size());
++        for (const auto& pkg : *list) {
+             std::println("  • {:<20} {:<15} [{}]", pkg.name, pkg.version.to_string(), pkg.channel);
+         }
+     } else if (sub == "info" && opts.args.size() >= 2) {
+         std::string pkg_name = opts.args[1];
+-        if (auto pkg = db.get_package(pkg_name)) {
+-            std::println("Package:     {}", pkg->name);
+-            std::println("Version:     {}", pkg->version.to_string());
+-            std::println("Channel:     {}", pkg->channel);
+-            std::println("License:     {}", pkg->license);
+-            std::println("Description: {}", pkg->description);
+-            std::println("Provides:    {}", sage::util::join(pkg->provides, ", "));
++        auto pkg_res = db.get_package(pkg_name);
++        if (!pkg_res) {
++            sage::util::log_error("Installed package database is inconsistent: {}", pkg_res.error());
++            return 1;
++        }
++        if (*pkg_res) {
++            const auto& pkg = **pkg_res;
++            std::println("Package:     {}", pkg.name);
++            std::println("Version:     {}", pkg.version.to_string());
++            std::println("Channel:     {}", pkg.channel);
++            std::println("License:     {}", pkg.license);
++            std::println("Description: {}", pkg.description);
++            std::println("Provides:    {}", sage::util::join(pkg.provides, ", "));
+         } else {
+             sage::util::log_error("Package '{}' is not installed", pkg_name);
+             return 1;
+@@ -1636,9 +2253,13 @@ int cmd_status(const CliOptions& opts) {
+         return 0;
+     }
+     auto installed = db_res->list_installed_packages();
+-    std::println("Installed Packages: {}", installed.size());
++    if (!installed) {
++        sage::util::log_error("Installed package database is inconsistent: {}", installed.error());
++        return 1;
++    }
++    std::println("Installed Packages: {}", installed->size());
+     if (full) {
+-        for (const auto& pkg : installed) {
++        for (const auto& pkg : *installed) {
+             std::println("  • {:<20} {:<15} [{}]", pkg.name, pkg.version.to_string(), pkg.channel);
+         }
+     }
+diff --git a/src/core/sage.archive.cppm b/src/core/sage.archive.cppm
+index d2fa8d4..5a87c86 100644
+--- a/src/core/sage.archive.cppm
++++ b/src/core/sage.archive.cppm
+@@ -4,6 +4,7 @@ module;
+ #include <unistd.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <cerrno>
+ #include <cstring>
+ #include <zstd.h>
+ 
+@@ -134,13 +135,25 @@ struct ExtractedPackage {
+     std::vector<package::FileEntry> extracted_files;
+ };
+ 
+-// ============================================================================
+-// Streaming Tar + Zstd Extractor (Extracts directly to target root)
+-// ============================================================================
++struct InspectedPackage {
++    package::PackageManifest manifest;
++    std::optional<service::ServiceSpec> service;
++    std::vector<package::FileEntry> data_files;
++};
+ 
+-inline std::expected<ExtractedPackage, std::string> extract_package(
++struct ArchiveEntryView {
++    std::string name;
++    uint64_t size{0};
++    uint32_t mode{0};
++    char typeflag{'0'};
++    std::string linkname;
++    std::span<const uint8_t> payload;
++};
++
++template <typename Handler>
++inline std::expected<void, std::string> walk_archive_entries(
+     const std::filesystem::path& archive_path,
+-    const std::filesystem::path& target_root) 
++    Handler&& handler)
+ {
+     std::ifstream file(archive_path, std::ios::binary);
+     if (!file.is_open()) {
+@@ -160,10 +173,8 @@ inline std::expected<ExtractedPackage, std::string> extract_package(
+ 
+     std::vector<uint8_t> ring;
+     ring.reserve(256 * 1024);
+-
+-    ExtractedPackage result;
+-    std::string manifest_content;
+-    std::string service_content;
++    size_t end_zero_blocks = 0;
++    bool frame_finished = false;
+ 
+     auto process_decompressed_bytes = [&](std::span<const uint8_t> chunk) -> std::expected<void, std::string> {
+         ring.insert(ring.end(), chunk.begin(), chunk.end());
+@@ -177,9 +188,13 @@ inline std::expected<ExtractedPackage, std::string> extract_package(
+                 if (ring[i] != 0) { all_zero = false; break; }
+             }
+             if (all_zero) {
++                ++end_zero_blocks;
+                 ring.erase(ring.begin(), ring.begin() + 512);
+                 continue;
+             }
++            if (end_zero_blocks > 0) {
++                return std::unexpected("Tar archive contains data after its end marker");
++            }
+ 
+             // Verify checksum
+             uint32_t expected_chk = static_cast<uint32_t>(parse_octal(hdr->chksum, sizeof(hdr->chksum)));
+@@ -205,61 +220,16 @@ inline std::expected<ExtractedPackage, std::string> extract_package(
+                 return {};
+             }
+ 
+-            const uint8_t* payload_data = ring.data() + 512;
+-
+-            if (full_name == ".METADATA/manifest.toml") {
+-                manifest_content.assign(reinterpret_cast<const char*>(payload_data), file_size);
+-            } else if (full_name == ".METADATA/service.toml") {
+-                service_content.assign(reinterpret_cast<const char*>(payload_data), file_size);
+-            } else if (full_name.starts_with("data/")) {
+-                std::string rel_path = full_name.substr(5); // strip "data/"
+-                if (!rel_path.empty()) {
+-                    std::filesystem::path dest_file = target_root / rel_path;
+-                    std::filesystem::create_directories(dest_file.parent_path());
+-
+-                    package::FileEntry entry;
+-                    entry.path = rel_path;
+-                    entry.mode = mode;
+-                    entry.size = file_size;
+-
+-                    if (typeflag == '5') {
+-                        // Directory
+-                        entry.type = package::FileType::Directory;
+-                        std::filesystem::create_directories(dest_file);
+-                    } else if (typeflag == '2') {
+-                        // Symlink
+-                        entry.type = package::FileType::Symlink;
+-                        entry.link_target = linkname;
+-                        std::error_code ec;
+-                        std::filesystem::remove(dest_file, ec);
+-                        std::filesystem::create_symlink(linkname, dest_file, ec);
+-                    } else {
+-                        // Regular File
+-                        entry.type = package::FileType::Regular;
+-                        std::string tmp_file = dest_file.string() + ".sage_tmp";
+-                        int fd = ::open(tmp_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode ? mode : 0644);
+-                        if (fd >= 0) {
+-                            if (file_size > 0) {
+-                                ssize_t w = ::write(fd, payload_data, file_size);
+-                                (void)w;
+-                            }
+-                            ::close(fd);
+-                            ::chmod(tmp_file.c_str(), mode ? mode : 0644);
+-                            std::error_code ren_ec;
+-                            std::filesystem::rename(tmp_file, dest_file, ren_ec);
+-                        }
+-
+-                        // Compute file SHA256
+-                        util::Sha256 hasher;
+-                        if (file_size > 0) {
+-                            hasher.update(payload_data, file_size);
+-                        }
+-                        entry.sha256 = hasher.finalize();
+-                    }
+-
+-                    result.extracted_files.push_back(std::move(entry));
+-                }
+-            }
++            ArchiveEntryView entry{
++                .name = std::move(full_name),
++                .size = file_size,
++                .mode = mode,
++                .typeflag = typeflag,
++                .linkname = std::move(linkname),
++                .payload = std::span<const uint8_t>(ring.data() + 512, file_size),
++            };
++            auto handle_res = handler(entry);
++            if (!handle_res) return handle_res;
+ 
+             ring.erase(ring.begin(), ring.begin() + total_entry_size);
+         }
+@@ -274,6 +244,7 @@ inline std::expected<ExtractedPackage, std::string> extract_package(
+             ZSTD_outBuffer out = { out_buffer.data(), out_buffer.size(), 0 };
+             auto dec_res = zstd_stream.decompress_stream(in, out);
+             if (!dec_res) return std::unexpected(dec_res.error());
++            frame_finished = *dec_res == 0;
+ 
+             if (out.pos > 0) {
+                 auto proc_res = process_decompressed_bytes(std::span<const uint8_t>(out_buffer.data(), out.pos));
+@@ -282,22 +253,377 @@ inline std::expected<ExtractedPackage, std::string> extract_package(
+         }
+     }
+ 
+-    if (manifest_content.empty()) {
+-        return std::unexpected("Package archive is missing .METADATA/manifest.toml");
++    if (file.bad()) {
++        return std::unexpected("Failed while reading package archive: " + archive_path.string());
++    }
++    if (!frame_finished) {
++        return std::unexpected("Truncated ZSTD package archive: " + archive_path.string());
++    }
++    if (!ring.empty()) {
++        return std::unexpected("Truncated tar block in package archive: " + archive_path.string());
++    }
++    if (end_zero_blocks < 2) {
++        return std::unexpected("Tar archive is missing its end marker");
+     }
+ 
++    return {};
++}
++
++struct PackageDataEntry {
++    std::string path;
++    char typeflag{'0'};
++};
++
++inline std::expected<std::string, std::string> normalize_data_path(std::string_view raw_path) {
++    std::filesystem::path path(raw_path);
++    if (path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
++        return std::unexpected("Package data path must be relative: " + std::string(raw_path));
++    }
++    for (const auto& component : path) {
++        if (component == "..") {
++            return std::unexpected("Package data path escapes the target root: " + std::string(raw_path));
++        }
++    }
++
++    auto normalized = path.lexically_normal();
++    if (normalized.empty() || normalized == ".") {
++        return std::unexpected("Package data path is empty");
++    }
++    return normalized.generic_string();
++}
++
++inline bool path_is_within(
++    const std::filesystem::path& root,
++    const std::filesystem::path& candidate)
++{
++    auto root_it = root.begin();
++    auto candidate_it = candidate.begin();
++    for (; root_it != root.end(); ++root_it, ++candidate_it) {
++        if (candidate_it == candidate.end() || *candidate_it != *root_it) return false;
++    }
++    return true;
++}
++
++inline std::expected<void, std::string> validate_target_path(
++    const PackageDataEntry& entry,
++    const std::filesystem::path& target_root,
++    const std::filesystem::path& resolved_root)
++{
++    const auto relative = std::filesystem::path(entry.path);
++    auto current = resolved_root;
++    for (const auto& component : relative.parent_path()) {
++        if (component == ".") continue;
++        current /= component;
++
++        std::error_code status_ec;
++        auto status = std::filesystem::symlink_status(current, status_ec);
++        if (status_ec == std::errc::no_such_file_or_directory) {
++            status_ec.clear();
++            continue;
++        }
++        if (status_ec) {
++            return std::unexpected(std::format(
++                "Cannot inspect parent directory for '{}': {}", entry.path, status_ec.message()));
++        }
++        if (std::filesystem::is_symlink(status)) {
++            std::error_code link_ec;
++            auto link_target = std::filesystem::read_symlink(current, link_ec);
++            if (link_ec) {
++                return std::unexpected(std::format(
++                    "Cannot inspect parent symlink for '{}': {}", entry.path, link_ec.message()));
++            }
++            auto resolved = link_target.is_absolute()
++                ? link_target
++                : current.parent_path() / link_target;
++            resolved = std::filesystem::weakly_canonical(resolved, link_ec);
++            if (link_ec) {
++                return std::unexpected(std::format(
++                    "Cannot resolve parent symlink for '{}': {}", entry.path, link_ec.message()));
++            }
++            if (!path_is_within(resolved_root, resolved)) {
++                return std::unexpected(std::format(
++                    "Parent symlink for '{}' escapes target root", entry.path));
++            }
++            current = std::move(resolved);
++        } else if (!std::filesystem::is_directory(status)) {
++            return std::unexpected(std::format(
++                "Parent path for '{}' is not a directory", entry.path));
++        }
++    }
++
++    const auto destination = target_root / relative;
++    std::error_code status_ec;
++    auto status = std::filesystem::symlink_status(destination, status_ec);
++    if (status_ec == std::errc::no_such_file_or_directory) return {};
++    if (status_ec) {
++        return std::unexpected(std::format(
++            "Cannot inspect '{}': {}", entry.path, status_ec.message()));
++    }
++
++    if (entry.typeflag == '5') {
++        if (!std::filesystem::is_directory(status)) {
++            return std::unexpected(std::format(
++                "Cannot replace '{}' with directory", entry.path));
++        }
++    } else if (entry.typeflag == '2' && std::filesystem::is_directory(status)) {
++        std::error_code empty_ec;
++        if (!std::filesystem::is_empty(destination, empty_ec) || empty_ec) {
++            return std::unexpected(std::format(
++                "Cannot replace non-empty directory '{}' with symlink", entry.path));
++        }
++    } else if (entry.typeflag != '2' && std::filesystem::is_directory(status)) {
++        return std::unexpected(std::format(
++            "Cannot replace directory '{}' with regular file", entry.path));
++    }
++    return {};
++}
++
++inline std::expected<InspectedPackage, std::string> inspect_package_impl(
++    const std::filesystem::path& archive_path,
++    const std::filesystem::path* target_root)
++{
++    std::string manifest_content;
++    std::string service_content;
++    bool manifest_seen = false;
++    bool service_seen = false;
++    std::vector<PackageDataEntry> data_entries;
++    std::unordered_set<std::string> data_paths;
++    std::unordered_set<std::string> archive_symlinks;
++
++    auto walk_res = walk_archive_entries(archive_path, [&](const ArchiveEntryView& entry)
++        -> std::expected<void, std::string> {
++        if (entry.name == ".METADATA/manifest.toml") {
++            if (manifest_seen) return std::unexpected("Package archive contains multiple manifests");
++            if (entry.typeflag != '0') return std::unexpected("Package manifest must be a regular file");
++            manifest_seen = true;
++            manifest_content.assign(
++                reinterpret_cast<const char*>(entry.payload.data()), entry.payload.size());
++            return {};
++        }
++        if (entry.name == ".METADATA/service.toml") {
++            if (service_seen) return std::unexpected("Package archive contains multiple service manifests");
++            if (entry.typeflag != '0') return std::unexpected("Package service manifest must be a regular file");
++            service_seen = true;
++            service_content.assign(
++                reinterpret_cast<const char*>(entry.payload.data()), entry.payload.size());
++            return {};
++        }
++        if (!entry.name.starts_with("data/")) return {};
++        if (entry.name.size() == 5) return {};
++        if (entry.typeflag != '0' && entry.typeflag != '5' && entry.typeflag != '2') {
++            return std::unexpected(std::format(
++                "Unsupported tar entry type '{}' for '{}'", entry.typeflag, entry.name));
++        }
++        auto path_res = normalize_data_path(std::string_view(entry.name).substr(5));
++        if (!path_res) return std::unexpected(path_res.error());
++        if (!data_paths.insert(*path_res).second) {
++            return std::unexpected("Package archive contains duplicate data path: " + *path_res);
++        }
++        data_entries.push_back(PackageDataEntry{*path_res, entry.typeflag});
++        if (entry.typeflag == '2') archive_symlinks.insert(*path_res);
++        return {};
++    });
++    if (!walk_res) return std::unexpected(walk_res.error());
++
++    if (!manifest_seen) {
++        return std::unexpected("Package archive is missing .METADATA/manifest.toml");
++    }
+     auto manifest_res = package::PackageManifest::parse_toml(manifest_content);
+-    if (!manifest_res) return std::unexpected("Failed to parse manifest.toml: " + manifest_res.error());
++    if (!manifest_res) {
++        return std::unexpected("Failed to parse manifest.toml: " + manifest_res.error());
++    }
++
++    InspectedPackage result;
+     result.manifest = std::move(*manifest_res);
+-    result.manifest.files = result.extracted_files;
++    if (service_seen) {
++        auto service_res = service::ServiceSpec::parse_toml(service_content);
++        if (!service_res) {
++            return std::unexpected("Failed to parse service.toml: " + service_res.error());
++        }
++        result.service = std::move(*service_res);
++    }
++
++    for (const auto& entry : data_entries) {
++        package::FileEntry file;
++        file.path = entry.path;
++        if (entry.typeflag == '5') {
++            file.type = package::FileType::Directory;
++        } else if (entry.typeflag == '2') {
++            file.type = package::FileType::Symlink;
++        }
++        result.data_files.push_back(std::move(file));
++    }
++
++    for (const auto& entry : data_entries) {
++        for (auto parent = std::filesystem::path(entry.path).parent_path();
++             !parent.empty() && parent != ".";
++             parent = parent.parent_path()) {
++            if (archive_symlinks.contains(parent.generic_string())) {
++                return std::unexpected(std::format(
++                    "Package data path '{}' traverses archive symlink '{}'",
++                    entry.path, parent.generic_string()));
++            }
++        }
++    }
+ 
+-    if (!service_content.empty()) {
+-        auto svc_res = service::ServiceSpec::parse_toml(service_content);
+-        if (svc_res) {
+-            result.service = std::move(*svc_res);
++    if (target_root) {
++        std::error_code root_ec;
++        auto absolute_root = std::filesystem::absolute(*target_root, root_ec).lexically_normal();
++        if (root_ec) {
++            return std::unexpected("Cannot resolve target root: " + root_ec.message());
++        }
++        auto resolved_root = std::filesystem::weakly_canonical(absolute_root, root_ec);
++        if (root_ec) {
++            return std::unexpected("Cannot resolve target root: " + root_ec.message());
+         }
++        for (const auto& entry : data_entries) {
++            auto path_res = validate_target_path(entry, *target_root, resolved_root);
++            if (!path_res) return std::unexpected(path_res.error());
++        }
++    }
++
++    return result;
++}
++
++inline std::expected<InspectedPackage, std::string> inspect_package(
++    const std::filesystem::path& archive_path)
++{
++    return inspect_package_impl(archive_path, nullptr);
++}
++
++inline std::expected<InspectedPackage, std::string> inspect_package(
++    const std::filesystem::path& archive_path,
++    const std::filesystem::path& target_root)
++{
++    return inspect_package_impl(archive_path, &target_root);
++}
++
++// ============================================================================
++// Streaming Tar + Zstd Extractor (Extracts directly to target root)
++// ============================================================================
++
++inline std::expected<ExtractedPackage, std::string> extract_package(
++    const std::filesystem::path& archive_path,
++    const std::filesystem::path& target_root,
++    const package::PackageManifest* expected_manifest = nullptr)
++{
++    auto inspect_res = inspect_package(archive_path, target_root);
++    if (!inspect_res) return std::unexpected(inspect_res.error());
++    if (expected_manifest
++        && package::package_identity(inspect_res->manifest)
++            != package::package_identity(*expected_manifest)) {
++        return std::unexpected(std::format(
++            "Package archive identity mismatch: selected {} {} [{}; {}], archive contains {} {} [{}; {}]",
++            expected_manifest->name, expected_manifest->version.to_string(),
++            expected_manifest->arch, expected_manifest->channel,
++            inspect_res->manifest.name, inspect_res->manifest.version.to_string(),
++            inspect_res->manifest.arch, inspect_res->manifest.channel));
+     }
+ 
++    ExtractedPackage result;
++    result.manifest = std::move(inspect_res->manifest);
++    result.service = std::move(inspect_res->service);
++
++    auto extract_res = walk_archive_entries(archive_path, [&](const ArchiveEntryView& archive_entry)
++        -> std::expected<void, std::string> {
++        if (!archive_entry.name.starts_with("data/")) return {};
++
++        if (archive_entry.name.size() == 5) return {};
++        auto path_res = normalize_data_path(std::string_view(archive_entry.name).substr(5));
++        if (!path_res) return std::unexpected(path_res.error());
++        std::string rel_path = std::move(*path_res);
++        std::filesystem::path dest_file = target_root / rel_path;
++        std::error_code parent_ec;
++        std::filesystem::create_directories(dest_file.parent_path(), parent_ec);
++        if (parent_ec) {
++            return std::unexpected(std::format(
++                "Cannot create parent directory for '{}': {}", rel_path, parent_ec.message()));
++        }
++
++        package::FileEntry entry;
++        entry.path = rel_path;
++        entry.mode = archive_entry.mode;
++        entry.size = archive_entry.size;
++
++        if (archive_entry.typeflag == '5') {
++            entry.type = package::FileType::Directory;
++            std::error_code dir_ec;
++            std::filesystem::create_directories(dest_file, dir_ec);
++            if (dir_ec) {
++                return std::unexpected(std::format(
++                    "Cannot create directory '{}': {}", rel_path, dir_ec.message()));
++            }
++        } else if (archive_entry.typeflag == '2') {
++            entry.type = package::FileType::Symlink;
++            entry.link_target = archive_entry.linkname;
++            std::error_code ec;
++            std::filesystem::remove(dest_file, ec);
++            if (ec) {
++                return std::unexpected(std::format(
++                    "Cannot replace '{}' with symlink: {}", rel_path, ec.message()));
++            }
++            std::filesystem::create_symlink(archive_entry.linkname, dest_file, ec);
++            if (ec) {
++                return std::unexpected(std::format(
++                    "Cannot create symlink '{}' -> '{}': {}", rel_path, archive_entry.linkname, ec.message()));
++            }
++        } else {
++            entry.type = package::FileType::Regular;
++            std::string tmp_file = dest_file.string() + ".sage_tmp";
++            int fd = ::open(tmp_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC,
++                            archive_entry.mode ? archive_entry.mode : 0644);
++            if (fd < 0) {
++                return std::unexpected(std::format(
++                    "Cannot create temporary file for '{}': {}", rel_path, std::strerror(errno)));
++            }
++            size_t written = 0;
++            while (written < archive_entry.size) {
++                ssize_t count = ::write(fd, archive_entry.payload.data() + written,
++                                        archive_entry.size - written);
++                if (count < 0 && errno == EINTR) continue;
++                if (count <= 0) {
++                    auto message = std::string(std::strerror(errno));
++                    ::close(fd);
++                    std::filesystem::remove(tmp_file);
++                    return std::unexpected(std::format(
++                        "Cannot write '{}': {}", rel_path, message));
++                }
++                written += static_cast<size_t>(count);
++            }
++            if (::close(fd) != 0) {
++                auto message = std::string(std::strerror(errno));
++                std::filesystem::remove(tmp_file);
++                return std::unexpected(std::format(
++                    "Cannot close '{}': {}", rel_path, message));
++            }
++            if (::chmod(tmp_file.c_str(), archive_entry.mode ? archive_entry.mode : 0644) != 0) {
++                auto message = std::string(std::strerror(errno));
++                std::filesystem::remove(tmp_file);
++                return std::unexpected(std::format(
++                    "Cannot set mode on '{}': {}", rel_path, message));
++            }
++            std::error_code ren_ec;
++            std::filesystem::rename(tmp_file, dest_file, ren_ec);
++            if (ren_ec) {
++                std::filesystem::remove(tmp_file);
++                return std::unexpected(std::format(
++                    "Cannot install '{}': {}", rel_path, ren_ec.message()));
++            }
++
++            util::Sha256 hasher;
++            if (!archive_entry.payload.empty()) {
++                hasher.update(archive_entry.payload.data(), archive_entry.payload.size());
++            }
++            entry.sha256 = hasher.finalize();
++        }
++
++        result.extracted_files.push_back(std::move(entry));
++        return {};
++    });
++    if (!extract_res) return std::unexpected(extract_res.error());
++
++    result.manifest.files = result.extracted_files;
++
+     return result;
+ }
+ 
+@@ -480,37 +806,37 @@ inline std::expected<void, std::string> generate_repo_index(
+     }
+ 
+     std::ostringstream ss;
++    const auto quote = [](std::string_view value) {
++        return package::escape_toml_basic_string(value);
++    };
+     ss << "schema_version = 1\n\n";
+     ss << "[channel]\n";
+-    ss << "name = \"" << channel_name << "\"\n";
++    ss << "name = \"" << quote(channel_name) << "\"\n";
+     ss << "updated_at = \"" << "2026-08-20T00:00:00Z" << "\"\n\n";
+ 
+-    size_t count = 0;
+     for (const auto& entry : std::filesystem::directory_iterator(repo_dir)) {
+         if (entry.is_regular_file() && entry.path().string().ends_with(".pkg.tar.zst")) {
+-            auto temp_sysroot = std::filesystem::temp_directory_path() / ("sage_idx_" + std::to_string(count));
+-            std::filesystem::remove_all(temp_sysroot);
+-            auto ext_res = extract_package(entry.path(), temp_sysroot);
+-            std::filesystem::remove_all(temp_sysroot);
+-            if (ext_res) {
+-                const auto& m = ext_res->manifest;
+-                ss << "[[packages]]\n";
+-                ss << "name = \"" << m.name << "\"\n";
+-                ss << "version = \"" << m.version.ver << "\"\n";
+-                ss << "release = \"" << m.version.rel << "\"\n";
+-                ss << "description = \"" << m.description << "\"\n";
+-                ss << "license = \"" << m.license << "\"\n";
+-                ss << "channel = \"" << m.channel << "\"\n";
+-                ss << "arch = \"" << m.arch << "\"\n";
+-                ss << "installed_size = " << m.installed_size << "\n";
+-                ss << "dependencies = [\n";
+-                for (const auto& d : m.dependencies) ss << "    \"" << d.to_string() << "\",\n";
+-                ss << "]\n";
+-                ss << "provides = [\n";
+-                for (const auto& p : m.provides) ss << "    \"" << p << "\",\n";
+-                ss << "]\n\n";
+-                count++;
++            auto inspect_res = inspect_package(entry.path());
++            if (!inspect_res) {
++                return std::unexpected(std::format(
++                    "Cannot index package '{}': {}", entry.path().filename().string(), inspect_res.error()));
+             }
++            const auto& m = inspect_res->manifest;
++            ss << "[[packages]]\n";
++            ss << "name = \"" << quote(m.name) << "\"\n";
++            ss << "version = \"" << quote(m.version.ver) << "\"\n";
++            ss << "release = \"" << quote(m.version.rel) << "\"\n";
++            ss << "description = \"" << quote(m.description) << "\"\n";
++            ss << "license = \"" << quote(m.license) << "\"\n";
++            ss << "channel = \"" << quote(m.channel) << "\"\n";
++            ss << "arch = \"" << quote(m.arch) << "\"\n";
++            ss << "installed_size = " << m.installed_size << "\n";
++            ss << "dependencies = [\n";
++            for (const auto& d : m.dependencies) ss << "    \"" << quote(d.to_string()) << "\",\n";
++            ss << "]\n";
++            ss << "provides = [\n";
++            for (const auto& p : m.provides) ss << "    \"" << quote(p) << "\",\n";
++            ss << "]\n\n";
+         }
+     }
+ 
+diff --git a/src/core/sage.db.cppm b/src/core/sage.db.cppm
+index 9052329..881d31d 100644
+--- a/src/core/sage.db.cppm
++++ b/src/core/sage.db.cppm
+@@ -77,14 +77,21 @@ public:
+     // Packages Table
+     // ========================================================================
+ 
+-    std::optional<package::PackageManifest> get_package(std::string_view name) {
++    std::expected<std::optional<package::PackageManifest>, std::string> get_package(
++        std::string_view name)
++    {
+         auto txn = begin_read_txn();
+-        if (!txn) return std::nullopt;
++        if (!txn) {
++            return std::unexpected("Failed to open installed package read transaction: " + txn.error());
++        }
+         auto val = dbi_packages_.get(*txn, name);
+-        if (!val) return std::nullopt;
++        if (!val) return std::optional<package::PackageManifest>{};
+         auto parsed = package::PackageManifest::parse_toml(*val);
+-        if (!parsed) return std::nullopt;
+-        return *parsed;
++        if (!parsed) {
++            return std::unexpected(std::format(
++                "Failed to parse installed package '{}' metadata: {}", name, parsed.error()));
++        }
++        return std::optional<package::PackageManifest>{std::move(*parsed)};
+     }
+ 
+     std::expected<void, std::string> put_package(
+@@ -102,13 +109,13 @@ public:
+         return dbi_packages_.del(txn, name);
+     }
+ 
+-    std::vector<package::PackageManifest> list_installed_packages() {
++    std::expected<std::vector<package::PackageManifest>, std::string> list_installed_packages() {
+         std::vector<package::PackageManifest> list;
+         auto txn = begin_read_txn();
+-        if (!txn) return list;
++        if (!txn) return std::unexpected("Failed to open installed package read transaction: " + txn.error());
+ 
+         auto cur_res = vendor::lmdb::MdbCursor::open(*txn, dbi_packages_);
+-        if (!cur_res) return list;
++        if (!cur_res) return std::unexpected("Failed to open installed package cursor: " + cur_res.error());
+         auto& cursor = *cur_res;
+ 
+         std::string_view k, v;
+@@ -116,6 +123,9 @@ public:
+             do {
+                 if (auto pkg = package::PackageManifest::parse_toml(v)) {
+                     list.push_back(std::move(*pkg));
++                } else {
++                    return std::unexpected(std::format(
++                        "Failed to parse installed package '{}' metadata: {}", k, pkg.error()));
+                 }
+             } while (cursor.next(k, v));
+         }
+@@ -154,6 +164,33 @@ public:
+     }
+ 
+     // Register package files into LMDB with atomic conflict checking
++    std::expected<void, std::string> check_file_conflicts(
++        vendor::lmdb::MdbTxn& txn,
++        std::string_view pkg_name,
++        const std::vector<package::FileEntry>& files)
++    {
++        const auto owner_prefix = std::string(pkg_name) + ":";
++        for (const auto& f : files) {
++            if (f.type == package::FileType::Directory) continue;
++            auto cleaned = util::clean_rel_path(f.path);
++            if (cleaned == "usr/share/info/dir" || cleaned.ends_with("/info/dir")) continue;
++
++            auto existing = dbi_files_.get_checked(txn, cleaned);
++            if (!existing) {
++                return std::unexpected(std::format(
++                    "Failed to check ownership for '{}': {}", cleaned, existing.error()));
++            }
++            if (*existing
++                && **existing != pkg_name
++                && !(**existing).starts_with(owner_prefix)) {
++                return std::unexpected(std::format(
++                    "File conflict: '{}' is already owned by '{}'",
++                    cleaned, **existing));
++            }
++        }
++        return {};
++    }
++
+     std::expected<void, std::string> register_files(
+         vendor::lmdb::MdbTxn& txn,
+         std::string_view pkg_name,
+@@ -162,6 +199,9 @@ public:
+     {
+         std::string owner_val = std::format("{}:{}", pkg_name, channel);
+ 
++        auto conflict_res = check_file_conflicts(txn, pkg_name, files);
++        if (!conflict_res) return conflict_res;
++
+         // Insert file records (new owner claims file)
+         for (const auto& f : files) {
+             if (f.type == package::FileType::Directory) continue;
+diff --git a/src/core/sage.package.cppm b/src/core/sage.package.cppm
+index 1fcfd89..5914028 100644
+--- a/src/core/sage.package.cppm
++++ b/src/core/sage.package.cppm
+@@ -226,6 +226,29 @@ struct FileEntry {
+     std::string link_target;
+ };
+ 
++inline std::string escape_toml_basic_string(std::string_view value) {
++    std::string escaped;
++    escaped.reserve(value.size());
++    for (unsigned char ch : value) {
++        switch (ch) {
++            case '"': escaped += "\\\""; break;
++            case '\\': escaped += "\\\\"; break;
++            case '\b': escaped += "\\b"; break;
++            case '\t': escaped += "\\t"; break;
++            case '\n': escaped += "\\n"; break;
++            case '\f': escaped += "\\f"; break;
++            case '\r': escaped += "\\r"; break;
++            default:
++                if (ch < 0x20 || ch == 0x7f) {
++                    escaped += std::format("\\u{:04X}", ch);
++                } else {
++                    escaped.push_back(static_cast<char>(ch));
++                }
++        }
++    }
++    return escaped;
++}
++
+ // ============================================================================
+ // Package Manifest Model
+ // ============================================================================
+@@ -339,41 +362,44 @@ struct PackageManifest {
+     }
+ 
+     [[nodiscard]] std::string serialize_toml() const {
++        const auto quote = [](std::string_view value) {
++            return escape_toml_basic_string(value);
++        };
+         std::ostringstream ss;
+         ss << "schema_version = " << schema_version << "\n\n";
+         ss << "[package]\n";
+-        ss << "name = \"" << name << "\"\n";
+-        ss << "version = \"" << version.ver << "\"\n";
+-        ss << "release = \"" << version.rel << "\"\n";
++        ss << "name = \"" << quote(name) << "\"\n";
++        ss << "version = \"" << quote(version.ver) << "\"\n";
++        ss << "release = \"" << quote(version.rel) << "\"\n";
+         if (version.epoch > 0) ss << "epoch = " << version.epoch << "\n";
+-        ss << "description = \"" << description << "\"\n";
+-        ss << "license = \"" << license << "\"\n";
+-        ss << "channel = \"" << channel << "\"\n";
+-        ss << "arch = \"" << arch << "\"\n";
++        ss << "description = \"" << quote(description) << "\"\n";
++        ss << "license = \"" << quote(license) << "\"\n";
++        ss << "channel = \"" << quote(channel) << "\"\n";
++        ss << "arch = \"" << quote(arch) << "\"\n";
+         ss << "installed_size = " << installed_size << "\n\n";
+ 
+         ss << "dependencies = [\n";
+         for (const auto& d : dependencies) {
+-            ss << "    \"" << d.to_string() << "\",\n";
++            ss << "    \"" << quote(d.to_string()) << "\",\n";
+         }
+         ss << "]\n\n";
+ 
+         ss << "provides = [\n";
+         for (const auto& p : provides) {
+-            ss << "    \"" << p << "\",\n";
++            ss << "    \"" << quote(p) << "\",\n";
+         }
+         ss << "]\n\n";
+ 
+         ss << "conflicts = [\n";
+         for (const auto& c : conflicts) {
+-            ss << "    \"" << c.to_string() << "\",\n";
++            ss << "    \"" << quote(c.to_string()) << "\",\n";
+         }
+         ss << "]\n\n";
+ 
+         if (!files.empty()) {
+             ss << "files = [\n";
+             for (const auto& f : files) {
+-                ss << "    \"" << f.path << "\",\n";
++                ss << "    \"" << quote(f.path) << "\",\n";
+             }
+             ss << "]\n";
+         }
+@@ -382,6 +408,24 @@ struct PackageManifest {
+     }
+ };
+ 
++struct PackageIdentity {
++    std::string name;
++    Version version;
++    std::string arch;
++    std::string channel;
++
++    auto operator<=>(const PackageIdentity&) const = default;
++};
++
++inline PackageIdentity package_identity(const PackageManifest& manifest) {
++    return PackageIdentity{
++        .name = manifest.name,
++        .version = manifest.version,
++        .arch = manifest.arch,
++        .channel = manifest.channel,
++    };
++}
++
+ // ============================================================================
+ // Recipe Model for Package Building (`recipe.toml`)
+ // ============================================================================
+diff --git a/src/core/sage.rebuild.cppm b/src/core/sage.rebuild.cppm
+index bf00317..b7b18a5 100644
+--- a/src/core/sage.rebuild.cppm
++++ b/src/core/sage.rebuild.cppm
+@@ -143,6 +143,11 @@ public:
+         const std::filesystem::path& sysroot = "/",
+         bool dry_run = false) 
+     {
++        auto installed_before = db.list_installed_packages();
++        if (!installed_before) {
++            return std::unexpected("Installed package database is inconsistent: " + installed_before.error());
++        }
++
+         if (!plan.has_changes) {
+             util::log_info("System state matches desired configuration. No reconcile needed.");
+             return {};
+@@ -173,7 +178,9 @@ public:
+ 
+         // 2. Unregister and remove obsolete packages
+         for (const auto& pkg_name : plan.packages_to_remove) {
+-            if (auto old_pkg = db.get_package(pkg_name)) {
++            auto old_pkg = std::ranges::find(
++                *installed_before, pkg_name, &package::PackageManifest::name);
++            if (old_pkg != installed_before->end()) {
+                 (void)db.unregister_files(*wtxn, old_pkg->files);
+                 (void)db.unregister_provides(*wtxn, old_pkg->provides);
+                 (void)db.del_package(*wtxn, pkg_name);
+@@ -201,8 +208,11 @@ public:
+ 
+         // 4. Automatically re-generate native service configurations for ALL installed daemons
+         auto installed = db.list_installed_packages();
++        if (!installed) {
++            return std::unexpected("Installed package database is inconsistent after reconcile: " + installed.error());
++        }
+         size_t gen_count = 0;
+-        for (const auto& pkg : installed) {
++        for (const auto& pkg : *installed) {
+             // Check if package has service definition in database or package files
+             service::ServiceSpec spec;
+             spec.name = pkg.name;
+diff --git a/src/core/sage.solver.cppm b/src/core/sage.solver.cppm
+index e42c2b6..0944805 100644
+--- a/src/core/sage.solver.cppm
++++ b/src/core/sage.solver.cppm
+@@ -109,6 +109,7 @@ public:
+         std::vector<package::PackageManifest> solution;
+         std::set<std::string> visited_symbols;
+         std::set<std::string> visited_packages;
++        std::map<std::string, std::string> selected_for_symbol;
+         std::vector<package::Dependency> queue = root_requests;
+ 
+         // Diagnostic cause tree recorder
+@@ -142,6 +143,7 @@ public:
+             }
+ 
+             visited_symbols.insert(req.name);
++            selected_for_symbol[req.name] = best_candidate->name;
+             if (visited_packages.contains(best_candidate->name)) {
+                 continue;
+             }
+@@ -154,8 +156,36 @@ public:
+             }
+         }
+ 
+-        // Sort solution in topological dependency install order
+-        return solution;
++        // The discovery queue records roots before their dependencies. Reorder
++        // the selected set so every dependency is installed before its user.
++        std::map<std::string, const package::PackageManifest*> selected_by_name;
++        for (const auto& pkg : solution) {
++            selected_by_name[pkg.name] = &pkg;
++        }
++
++        std::map<std::string, std::uint8_t> visit_state;
++        std::vector<package::PackageManifest> install_order;
++        auto visit = [&](this auto&& self, const package::PackageManifest& pkg) -> void {
++            auto& state = visit_state[pkg.name];
++            if (state == 2) return;
++            if (state == 1) return; // dependency cycle: retain deterministic DFS order
++            state = 1;
++            for (const auto& dep : pkg.dependencies) {
++                auto selected = selected_for_symbol.find(dep.name);
++                if (selected == selected_for_symbol.end()) continue;
++                auto dependency = selected_by_name.find(selected->second);
++                if (dependency != selected_by_name.end()) {
++                    self(*dependency->second);
++                }
++            }
++            state = 2;
++            install_order.push_back(pkg);
++        };
++
++        for (const auto& pkg : solution) {
++            visit(pkg);
++        }
++        return install_order;
+     }
+ 
+ private:
+diff --git a/src/vendor/sage.vendor.lmdb.cppm b/src/vendor/sage.vendor.lmdb.cppm
+index b2e4abd..59b710d 100644
+--- a/src/vendor/sage.vendor.lmdb.cppm
++++ b/src/vendor/sage.vendor.lmdb.cppm
+@@ -179,6 +179,25 @@ public:
+         return std::nullopt;
+     }
+ 
++    [[nodiscard]] std::expected<std::optional<std::string_view>, std::string> get_checked(
++        MdbTxn& txn,
++        std::string_view key) const noexcept
++    {
++        if (!valid_ || !txn.handle()) {
++            return std::unexpected("Invalid DBI or transaction");
++        }
++        MDB_val k = to_val(key);
++        MDB_val v{};
++        int rc = mdb_get(txn.handle(), dbi_, &k, &v);
++        if (rc == 0) {
++            return std::optional<std::string_view>{from_val(v)};
++        }
++        if (rc == MDB_NOTFOUND) {
++            return std::optional<std::string_view>{};
++        }
++        return std::unexpected(mdb_strerror(rc));
++    }
++
+     std::expected<void, std::string> put(
+         MdbTxn& txn, 
+         std::string_view key, 

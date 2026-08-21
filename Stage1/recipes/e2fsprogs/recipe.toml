@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "e2fsprogs"
 version = "1.47.4"
-release = "1"
+release = "2"
 description = "Ext2/3/4 filesystem utilities (mkfs, fsck, tune2fs, debugfs, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -35,6 +35,6 @@ build = [
 install = [
     "make install DESTDIR=$DESTDIR",
     # 拆分：库/头文件归 e2fsprogs-libs（libext2fs/libcom_err/libss/libsupport）
-    "rm -f $DESTDIR/usr/lib/libext2fs.so* $DESTDIR/usr/lib/libcom_err.so* $DESTDIR/usr/lib/libss.so* $DESTDIR/usr/lib/libsupport.so*",
+    "rm -f $DESTDIR/usr/lib/libext2fs.* $DESTDIR/usr/lib/libcom_err.* $DESTDIR/usr/lib/libss.* $DESTDIR/usr/lib/libsupport.* $DESTDIR/usr/lib/libe2p.*",
     "rm -rf $DESTDIR/usr/include $DESTDIR/usr/lib/et $DESTDIR/usr/lib/ss $DESTDIR/usr/lib/pkgconfig",
 ]

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "mkinitcpio"
 version = "41.1"
-release = "3"
+release = "4"
 description = "Modular initramfs image creation utility"
 license = "GPL-2.0-only"
 channel = "system"
@@ -49,4 +49,5 @@ build = [
 
 install = [
     "DESTDIR=$DESTDIR ninja -C build install",
+    "rm -f $DESTDIR/etc/mkinitcpio.conf",
 ]
