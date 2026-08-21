@@ -71,15 +71,13 @@ sage --root /tmp/sctest install shc       # 永远不要拿 / 做试验
 `recipe.toml` 有 `[source] url` 就**必须**有非空 `sha256`。
 sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信任任意中间人。
 
-`tests/checksum-debt.txt` 只登记历史遗留的 102 个 Stage1 配方，按路径钉死。
-校验器对新增条目的态度是明确的：
+`tests/checksum-debt.txt` 曾登记历史遗留的 102 个 Stage1 配方，按路径钉死；
+这些债务现已全部清偿，文件为空。校验器对新增条目的态度是明确的：
 
 > a newly added source must ship a checksum -- do not add it to checksum-debt.txt
 
-**当前状态**：`Stage2/recipes/` 中 151 个配方 `sha256` 为空，CI 因此是红的。
-它们的 distfiles 在构建机 `/home/ir/stage2/stage2/recipes/*/distfiles/` 下齐全，
-补齐方法是对 URL basename 对应的文件取 sha256（已验证：现存 22 个有校验和的
-stage2 配方，重新哈希其 distfile 22/22 吻合）。**未经用户明确要求不要擅自补。**
+**当前状态**：全树 286 个配方均通过 schema 校验；凡有 `[source] url` 的配方
+都已有非空 `sha256`，没有待清偿的校验和债务。
 
 ---
 
