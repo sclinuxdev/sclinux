@@ -60,6 +60,15 @@ def main() -> int:
         "vg_name=vg0" in image_assembler and "SCLINUX_VG_NAME" not in image_assembler,
         True,
     )
+    failed += not check(
+        "image assembler isolates its working VG from a host vg0",
+        'work_vg_name="sclinux_image_$$"' in image_assembler
+        and 'target vgcreate --devices "$lvm_partition" "$work_vg_name"'
+        in image_assembler
+        and 'target vgrename --devices "$lvm_partition" "$work_vg_name" "$vg_name"'
+        in image_assembler,
+        True,
+    )
     architectures = build.load_architectures()
     failed += not check(
         "repository declares exactly the two target architectures",
@@ -1071,6 +1080,221 @@ def main() -> int:
             "Stage1 rejects reversed package ranges",
             range_error,
             "Stage1 package range is reversed",
+        )
+
+        resume_workspace = Path(directory) / "resume-workspace"
+        resume_recipes = resume_workspace / "recipes"
+        resume_names = ["one", "two", "three"]
+        for name in resume_names:
+            recipe_dir = resume_recipes / name
+            recipe_dir.mkdir(parents=True)
+            (recipe_dir / "recipe.toml").write_text(
+                "[package]\n"
+                f'name = "{name}"\n'
+                'version = "1.0"\n'
+                'release = "1"\n'
+                'arch = "aarch64"\n\n'
+                "prepare = []\n"
+                "build = []\n"
+                "install = []\n"
+            )
+        for name in ("one", "three"):
+            (resume_recipes / name / f"{name}-1.0-1-aarch64.pkg.tar.zst").write_bytes(
+                payload
+            )
+        resume_sysroot = resume_workspace / "build-sysroot"
+        resume_sysroot.mkdir(parents=True)
+        stale_sysroot_file = resume_sysroot / "stale-from-later-package"
+        stale_sysroot_file.write_bytes(payload)
+        resumed_artifact = resume_recipes / "two/two-1.0-1-aarch64.pkg.tar.zst"
+        staged_names = []
+        reset_observations = []
+
+        def record_staged_package(entry, *_args, **_kwargs):
+            staged_names.append(entry["name"])
+            reset_observations.append(not stale_sysroot_file.exists())
+
+        def create_resumed_artifact(command, **_kwargs):
+            resumed_artifact.write_bytes(payload)
+            return subprocess.CompletedProcess(command, 0)
+
+        with (
+            mock.patch.object(build, "validate_stage1_procfs"),
+            mock.patch.object(build, "load_stage1_manifest", return_value=resume_names),
+            mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            mock.patch.object(build, "stage1_build_environment", return_value={}),
+            mock.patch.object(build, "refresh_stage1_tool_wrappers"),
+            mock.patch.object(
+                build, "stage_stage1_package", side_effect=record_staged_package
+            ),
+            mock.patch.object(build.subprocess, "run", side_effect=create_resumed_artifact),
+        ):
+            resumed = build.run_stage1_packages(
+                {"arch": "aarch64"}, resume_workspace, first="two", last="two"
+            )
+        failed += not check(
+            "Stage1 resume recreates its sysroot and stages only preceding artifacts",
+            ([entry["name"] for entry in resumed], staged_names, reset_observations),
+            (["two"], ["one", "two"], [True, True]),
+        )
+
+        native_staged_names = []
+
+        def record_native_package(entry, *_args, **_kwargs):
+            native_staged_names.append(entry["name"])
+
+        with (
+            mock.patch.object(build, "validate_stage1_procfs"),
+            mock.patch.object(build, "load_stage1_manifest", return_value=resume_names),
+            mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            mock.patch.object(build, "stage1_build_environment", return_value={}),
+            mock.patch.object(build, "refresh_stage1_tool_wrappers"),
+            mock.patch.object(build, "clean_stage1_build_sysroot") as mocked_clean,
+            mock.patch.object(
+                build, "stage_stage1_package", side_effect=record_native_package
+            ),
+            mock.patch.object(build.subprocess, "run", side_effect=create_resumed_artifact),
+        ):
+            native_resumed = build.run_stage1_packages(
+                {"arch": "aarch64"},
+                resume_workspace,
+                first="two",
+                last="two",
+                sysroot=Path("/"),
+            )
+        failed += not check(
+            "Stage1 native resume preserves the live root and stages no prior artifacts",
+            (
+                [entry["name"] for entry in native_resumed],
+                native_staged_names,
+                mocked_clean.call_count,
+            ),
+            (["two"], ["two"], 0),
+        )
+
+        (resume_workspace / ".stage1-build-packages").mkdir()
+        try:
+            with (
+                mock.patch.object(build, "validate_stage1_procfs"),
+                mock.patch.object(
+                    build, "load_stage1_manifest", return_value=resume_names
+                ),
+                mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            ):
+                build.run_stage1_packages(
+                    {"arch": "aarch64"},
+                    resume_workspace,
+                    first="two",
+                    last="two",
+                    sysroot=resume_workspace,
+                )
+        except build.ConfigError as exc:
+            containing_sysroot_error = str(exc)
+        else:
+            containing_sysroot_error = "no error"
+        failed += not check(
+            "Stage1 rejects a scratch sysroot that contains its workspace",
+            (
+                "must not contain its workspace" in containing_sysroot_error,
+                (resume_recipes / "one/recipe.toml").is_file(),
+            ),
+            (True, True),
+        )
+
+        source_input = resume_workspace / "sources/cache"
+        source_input.mkdir(parents=True)
+        source_sentinel = source_input / "locked-source"
+        source_sentinel.write_bytes(payload)
+        input_overlap_results = []
+        for candidate, sentinel in (
+            (resume_recipes / "one", resume_recipes / "one/recipe.toml"),
+            (source_input, source_sentinel),
+        ):
+            (candidate / ".stage1-build-packages").mkdir()
+            try:
+                build.reset_stage1_build_sysroot(
+                    candidate, resume_workspace / "build-sysroot", resume_workspace
+                )
+            except build.ConfigError as exc:
+                overlap_error = str(exc)
+            else:
+                overlap_error = "no error"
+            input_overlap_results.append(
+                ("must not overlap workspace inputs" in overlap_error, sentinel.is_file())
+            )
+        failed += not check(
+            "Stage1 rejects scratch sysroots inside recipe and source inputs",
+            input_overlap_results,
+            [(True, True), (True, True)],
+        )
+
+        linked_workspace = Path(directory) / "linked-workspace"
+        linked_workspace.mkdir()
+        linked_overlap_results = []
+        for input_name in ("recipes", "sources"):
+            external_input = Path(directory) / f"external-{input_name}"
+            external_input.mkdir()
+            (external_input / ".stage1-build-packages").mkdir()
+            external_sentinel = external_input / "input-data"
+            external_sentinel.write_bytes(payload)
+            (linked_workspace / input_name).symlink_to(
+                external_input, target_is_directory=True
+            )
+            try:
+                build.reset_stage1_build_sysroot(
+                    external_input,
+                    linked_workspace / "build-sysroot",
+                    linked_workspace,
+                )
+            except build.ConfigError as exc:
+                linked_overlap_error = str(exc)
+            else:
+                linked_overlap_error = "no error"
+            linked_overlap_results.append(
+                (
+                    "must not overlap workspace inputs" in linked_overlap_error,
+                    external_sentinel.is_file(),
+                )
+            )
+        failed += not check(
+            "Stage1 resolves linked recipe and source inputs before reset checks",
+            linked_overlap_results,
+            [(True, True), (True, True)],
+        )
+
+        containing_input_results = []
+        for input_name in ("recipes", "sources"):
+            containing_workspace = Path(directory) / f"containing-{input_name}"
+            containing_workspace.mkdir()
+            external_sysroot = Path(directory) / f"external-sysroot-{input_name}"
+            external_input = external_sysroot / "managed-input"
+            external_input.mkdir(parents=True)
+            (external_sysroot / ".stage1-build-packages").mkdir()
+            external_sentinel = external_input / "input-data"
+            external_sentinel.write_bytes(payload)
+            (containing_workspace / input_name).symlink_to(
+                external_input, target_is_directory=True
+            )
+            try:
+                build.reset_stage1_build_sysroot(
+                    external_sysroot,
+                    containing_workspace / "build-sysroot",
+                    containing_workspace,
+                )
+            except build.ConfigError as exc:
+                containing_input_error = str(exc)
+            else:
+                containing_input_error = "no error"
+            containing_input_results.append(
+                (
+                    "must not overlap workspace inputs" in containing_input_error,
+                    external_sentinel.is_file(),
+                )
+            )
+        failed += not check(
+            "Stage1 rejects sysroots containing linked recipe and source inputs",
+            containing_input_results,
+            [(True, True), (True, True)],
         )
 
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"

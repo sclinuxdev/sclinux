@@ -13,7 +13,9 @@ disk_size=${SCLINUX_DISK_SIZE:-16G}
 root_size=${SCLINUX_ROOT_SIZE:-10G}
 home_size=${SCLINUX_HOME_SIZE:-4G}
 vg_name=vg0
+work_vg_name="sclinux_image_$$"
 loop_device=
+lvm_partition=
 mount_root=
 vg_active=false
 
@@ -31,7 +33,8 @@ cleanup() {
         rmdir "$mount_root" 2>/dev/null || true
     fi
     if [ "$vg_active" = true ]; then
-        target vgchange --activate n "$vg_name" >/dev/null 2>&1 || true
+        target vgchange --devices "$lvm_partition" \
+            --activate n "$work_vg_name" >/dev/null 2>&1 || true
     fi
     if [ -n "$loop_device" ]; then
         losetup --detach "$loop_device" 2>/dev/null || true
@@ -62,7 +65,7 @@ mount --make-rslave "$rootfs/dev"
 mount --rbind /run "$rootfs/run"
 mount --make-rslave "$rootfs/run"
 
-for command in sgdisk partx pvcreate vgcreate lvcreate vgchange mkfs.xfs mkfs.fat blkid; do
+for command in sgdisk partx pvcreate vgcreate vgrename lvcreate vgchange mkfs.xfs mkfs.fat blkid; do
     if ! target /usr/bin/test -x "/usr/bin/$command"; then
         echo "error: required image tool is missing from ROOTFS: $command" >&2
         exit 2
@@ -100,15 +103,18 @@ if [ ! -b "$esp_partition" ] || [ ! -b "$lvm_partition" ]; then
     exit 1
 fi
 
-target pvcreate --yes --force "$lvm_partition"
-target vgcreate "$vg_name" "$lvm_partition"
-target lvcreate --yes --type thin-pool --extents 90%FREE --name pool "$vg_name"
-target lvcreate --yes --virtualsize "$root_size" --thinpool "$vg_name/pool" --name root
-target lvcreate --yes --virtualsize "$home_size" --thinpool "$vg_name/pool" --name home
+target pvcreate --devices "$lvm_partition" --yes --force "$lvm_partition"
+target vgcreate --devices "$lvm_partition" "$work_vg_name" "$lvm_partition"
+target lvcreate --devices "$lvm_partition" --yes --type thin-pool \
+    --extents 90%FREE --name pool "$work_vg_name"
+target lvcreate --devices "$lvm_partition" --yes \
+    --virtualsize "$root_size" --thinpool "$work_vg_name/pool" --name root
+target lvcreate --devices "$lvm_partition" --yes \
+    --virtualsize "$home_size" --thinpool "$work_vg_name/pool" --name home
 vg_active=true
 
-root_device=/dev/mapper/${vg_name}-root
-home_device=/dev/mapper/${vg_name}-home
+root_device=/dev/mapper/${work_vg_name}-root
+home_device=/dev/mapper/${work_vg_name}-home
 target mkfs.xfs -f -L SCLINUX_ROOT "$root_device"
 target mkfs.xfs -f -L SCLINUX_HOME "$home_device"
 target mkfs.fat -F 32 -n SCLINUX_EFI "$esp_partition"
@@ -134,5 +140,14 @@ printf '%s\n' \
     "UUID=$esp_uuid /boot/efi vfat umask=0077 0 2" \
     > "$mount_root/etc/fstab"
 
+sync
+umount "$mount_root/boot/efi"
+umount "$mount_root/home"
+umount "$mount_root"
+rmdir "$mount_root"
+mount_root=
+target vgchange --devices "$lvm_partition" --activate n "$work_vg_name"
+vg_active=false
+target vgrename --devices "$lvm_partition" "$work_vg_name" "$vg_name"
 sync
 echo "assembled $output"
