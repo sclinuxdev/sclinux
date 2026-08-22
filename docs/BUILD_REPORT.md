@@ -30,7 +30,7 @@
 - `docs/DISTRO_POLICY.md:138-148` 要求每个上游源码 URL 都有 SHA256；
 - `docs/INSTALLATION.md:73-85` 定义 GPT、ESP、LVM thin、XFS 的磁盘布局；
 - `docs/INSTALLATION.md:117-127` 选择 systemd-boot，并指出内核/ESP 同步仍缺自动机制；
-- `Stage1/manifest.toml:1-5` 声明 Stage1 应在 Stage0 chroot 中全量重建，但仓库当前没有所引用的 `stage1/scripts/gen-order.py` 或 Stage0 实现；
+- 本报告起始时，`Stage1/manifest.toml:1-5` 声明 Stage1 应在 Stage0 chroot 中全量重建，但仓库尚无所引用的 `stage1/scripts/gen-order.py` 或 Stage0 实现；本阶段随后补齐了 Stage0 与构建入口；
 - `tests/checksum-debt.txt` 当前没有债务条目，全树有源码 URL 的配方都固定 SHA256；
 - `config/architectures.toml` 集中声明两种架构差异，Stage1 canonical recipes 保持架构无关。
 

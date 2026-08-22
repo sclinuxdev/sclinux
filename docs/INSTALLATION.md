@@ -7,7 +7,7 @@
 **Bootloader:** systemd-boot (推荐) / GRUB (备选)
 
 > [!IMPORTANT]
-> **当前可执行范围**：Stage1 已生成同一清单下的 x86_64 与 aarch64 软件仓库，`base` 闭包包含 120 个包，并由 Sage 自动执行 `ldconfig`、initramfs 与引导器触发器。`tools/assemble-image-libguestfs.sh` 可把 rootfs 归档组装为本文定义的 qcow2 布局。
+> **当前可执行范围**：Stage1 已生成同一清单下的 x86_64 与 aarch64 软件仓库，`base` 闭包包含 120 个包。通过 Sage 安装事务部署时会执行 `ldconfig`、initramfs 与引导器触发器；`tools/build.py` 导出的暂存 rootfs 及两个镜像组装器不会执行安装事务，必须按 §7.1 手工完成引导收口。`tools/assemble-image-libguestfs.sh` 可把 rootfs 归档组装为本文定义的 qcow2 布局。
 
 ---
 
@@ -220,12 +220,20 @@ XFS 支持 `FITRIM`，且 thin pool 的 `discards` 默认为 `passdown`，因此
 
 ## 7. 系统 bootstrap
 
-> [!NOTE]
-> 以下命令假定 `/etc/sage/channels.toml` 已指向由 `sage repo index` 生成的架构匹配仓库。
+> [!IMPORTANT]
+> 安装前必须先写目标根的 `/mnt/etc/sage/channels.toml`。目标根缺少该文件时，
+> `sage --root /mnt` 会静默回退读取宿主的 `/etc/sage/channels.toml`，可能选错仓库或架构。
+> `/mnt/var/lib/sage/` 也必须预先存在；在 [Sage PR #19](https://github.com/sclinuxdev/sage/pull/19)
+> 合并前，目录缺失会误报 `another sage instance is operating on ...`
+>（见 [Sage issue #17](https://github.com/sclinuxdev/sage/issues/17)）。
 
 安装器的核心是 `sage` 已经实现的 `--root` sysroot 隔离能力——整个 bootstrap 本质上是围绕它的一层脚本，而非独立的安装程序。
 
 ```bash
+# 先准备目标根配置与状态目录；channels.toml 必须指向架构匹配且同次构建的仓库
+install -d /mnt/etc/sage /mnt/var/lib/sage
+install -Dm644 /path/to/ARCH_CHANNELS.toml /mnt/etc/sage/channels.toml
+
 # 将底座包集安装进 /mnt
 sage --root /mnt install base
 
@@ -249,11 +257,14 @@ TOML
 genfstab -U /mnt >> /mnt/etc/fstab
 ```
 
-安装完成时 Sage 已执行 §7.1 所列的三个触发器。任一触发器失败时，不应组装或启动该 rootfs。
+通过上述 Sage 安装事务完成部署时，Sage 会执行 §7.1 所列触发器。任一触发器失败时，不应组装或启动该 rootfs。
 
-### 7.1 自动触发器与手工恢复
+### 7.1 安装事务触发器与手工引导收口
 
-正常安装会依次运行 `ldconfig`、`mkinitcpio -P` 与 `sclinux-update-boot`。下列步骤只用于修复中断的构建环境，三条命令都必须在目标系统中运行。
+正常的 Sage 安装事务会依次运行 `ldconfig`、initramfs 与引导器 capability hook。
+如果 rootfs 来自 `stage1-run` 暂存目录或直接导入的归档，两个镜像组装器只负责磁盘布局、
+文件导入与 fstab，不会执行这些 hook。此时下列步骤是首次启动前的必需步骤；恢复中断的
+构建环境时也使用同一流程。所有命令都必须在已挂载目标根与 ESP 的目标系统中运行。
 
 ```bash
 # 挂载 chroot 所需的伪文件系统
@@ -281,6 +292,7 @@ mkinitcpio -P
 **第二步：安装引导器并写入引导项。**
 
 ```bash
+bootctl --esp-path=/boot/efi install
 sclinux-update-boot
 ```
 
@@ -329,7 +341,15 @@ lvremove vg0/root-pre-rebuild
 | **QEMU + UEFI firmware** | 分别使用 q35/OVMF 与 virt/AAVMF 执行启动门禁 |
 | **PRoot 5.4.0+** | 仅用于没有 mount/chroot 权限的构建主机；5.4.0 首次支持目标 glibc 使用的 `faccessat2` |
 
-`tools/assemble-image-libguestfs.sh ROOTFS.tar.zst OUTPUT.qcow2` 会生成 fstab 并拒绝覆盖已有镜像。产物仍须通过 `qemu-img check` 与 `tests/qemu-login-smoke.exp`，不能只以组装脚本退出码作为启动证明。
+`tools/assemble-image-libguestfs.sh ROOTFS.tar.zst OUTPUT.qcow2` 会生成 fstab 并拒绝覆盖已有镜像。
+
+> [!IMPORTANT]
+> 两个镜像组装器只建立 GPT、ESP、LVM thin、XFS，导入 rootfs 并写入 fstab；它们不会执行
+> Sage 安装事务或 capability hook。归档来源的 rootfs 必须在首次启动前挂载目标根与 ESP，
+> 按 §7.1 运行 `mkinitcpio -P`、`bootctl --esp-path=/boot/efi install` 和
+> `sclinux-update-boot`。否则镜像没有完整的 initramfs、EFI loader 与 loader entry。
+
+产物仍须通过 `qemu-img check` 与 `tests/qemu-login-smoke.exp`，不能只以组装脚本退出码作为启动证明。
 
 启动门禁默认等待 600 秒。在没有硬件虚拟化的跨架构 TCG 环境中，`sage verify` 可能需要更长时间；可用 `SCLINUX_QEMU_TIMEOUT=1800` 提高整段 expect 等待上限。该值必须是正整数，且只改变测试等待时间，不会跳过任何来宾内检查。
 
