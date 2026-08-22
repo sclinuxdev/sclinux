@@ -1,0 +1,50 @@
+schema_version = 1
+
+[package]
+name = "xfsprogs"
+version = "7.1.1"
+release = "2"
+description = "XFS filesystem utilities"
+license = "GPL-2.0-only AND LGPL-2.1-only"
+channel = "system"
+
+[source]
+url = "https://www.kernel.org/pub/linux/utils/fs/xfs/xfsprogs/xfsprogs-7.1.1.tar.xz"
+sha256 = "063edc31ba8e85c95c7faf9be465a04898bba7c6e622fdd9b146eed4ca5415e8"
+
+dependencies = [
+    "glibc >= 2.44",
+    "libinih >= 62",
+    "liburcu >= 0.15.6",
+    "lvm2 >= 2.03.42",
+    "util-linux-libs >= 2.40",
+]
+
+build_dependencies = [
+    "autoconf >= 2.72",
+    "automake >= 1.18",
+    "gcc >= 15.3.0",
+    "gettext >= 0.22",
+    "libtool >= 2.4",
+    "make >= 4.4",
+    "pkgconf >= 2.0",
+]
+
+provides = [
+    "xfsprogs",
+    "so:libhandle.so.1",
+]
+
+prepare = [
+]
+
+build = [
+    "make configure",
+    "OPTIMIZER=' ' ./configure --prefix=/usr --sbindir=/usr/bin --libdir=/usr/lib --libexecdir=/usr/lib --localstatedir=/var --with-systemd-unit-dir=/usr/lib/systemd/system --with-udev-rule-dir=/usr/lib/udev/rules.d --disable-lib64 --disable-editline --disable-scrub --disable-libicu",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make PKG_USER=root PKG_GROUP=root DIST_ROOT=$DESTDIR PKG_ROOT_SBIN_DIR=/usr/bin install",
+    "make PKG_USER=root PKG_GROUP=root DIST_ROOT=$DESTDIR PKG_ROOT_SBIN_DIR=/usr/bin install-dev",
+]

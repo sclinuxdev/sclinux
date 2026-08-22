@@ -1,0 +1,41 @@
+schema_version = 1
+
+[package]
+name = "libinih"
+version = "62"
+release = "1"
+description = "Simple INI file parser"
+license = "BSD-3-Clause"
+channel = "system"
+
+[source]
+url = "https://github.com/benhoyt/inih/archive/refs/tags/r62.tar.gz"
+sha256 = "9c15fa751bb8093d042dae1b9f125eb45198c32c6704cd5481ccde460d4f8151"
+
+dependencies = [
+    "glibc >= 2.44",
+    "gcc-libs >= 15.3.0",
+]
+
+build_dependencies = [
+    "meson >= 1.5.0",
+    "ninja >= 1.11.0",
+]
+
+provides = [
+    "libinih",
+    "so:libinih.so.0",
+    "so:libINIReader.so.0",
+]
+
+prepare = [
+]
+
+build = [
+    "meson setup build --prefix=/usr --libdir=lib --buildtype=release -Ddefault_library=shared -Ddistro_install=true -Dwith_INIReader=true",
+    "ninja -C build",
+]
+
+install = [
+    "DESTDIR=$DESTDIR ninja -C build install",
+]
