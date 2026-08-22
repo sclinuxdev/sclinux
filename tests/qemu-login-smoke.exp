@@ -6,6 +6,13 @@ if {$argc == 0} {
 }
 
 set timeout 600
+if {[info exists env(SCLINUX_QEMU_TIMEOUT)]} {
+    if {![string is integer -strict $env(SCLINUX_QEMU_TIMEOUT)] || $env(SCLINUX_QEMU_TIMEOUT) <= 0} {
+        puts stderr "error: SCLINUX_QEMU_TIMEOUT must be a positive integer"
+        exit 2
+    }
+    set timeout $env(SCLINUX_QEMU_TIMEOUT)
+}
 set expected_arch "aarch64"
 if {[info exists env(SCLINUX_EXPECT_ARCH)]} {
     set expected_arch $env(SCLINUX_EXPECT_ARCH)

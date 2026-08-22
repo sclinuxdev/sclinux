@@ -331,6 +331,8 @@ lvremove vg0/root-pre-rebuild
 
 `tools/assemble-image-libguestfs.sh ROOTFS.tar.zst OUTPUT.qcow2` 会生成 fstab 并拒绝覆盖已有镜像。产物仍须通过 `qemu-img check` 与 `tests/qemu-login-smoke.exp`，不能只以组装脚本退出码作为启动证明。
 
+启动门禁默认等待 600 秒。在没有硬件虚拟化的跨架构 TCG 环境中，`sage verify` 可能需要更长时间；可用 `SCLINUX_QEMU_TIMEOUT=1800` 提高整段 expect 等待上限。该值必须是正整数，且只改变测试等待时间，不会跳过任何来宾内检查。
+
 ---
 
 ## 10. 已知限制

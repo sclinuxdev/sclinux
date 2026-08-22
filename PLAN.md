@@ -214,12 +214,21 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | B：Stage0 与统一入口 | 已完成 |
 | C：配方双架构参数化 | 已完成 |
 | D：可启动系统包集 | 已完成（双架构 120/120；Sage 与 SHC 已进入 base 闭包） |
-| E：rootfs/qcow2 组装 | 进行中（双架构 rootfs 与 x86_64 最终 qcow2 已完成；aarch64 qcow2 待导出后组装） |
+| E：rootfs/qcow2 组装 | 已完成（双架构 rootfs 与 16 GiB UEFI qcow2 均已生成并通过 `qemu-img check`） |
 | F：x86_64 验证 | 已完成（干净基镜像通过 qemu-img，临时 overlay 经 OVMF/TCG 启动；120 包与 49,028 个登记文件全部匹配，failed unit 为零） |
-| G：aarch64 验证 | 进行中（120 包 rootfs 与 43,648 个登记文件曾通过；本机磁盘写满后须重新校验，再组装 qcow2 并经 AAVMF/QEMU 验证） |
-| H：文档、CI 与交付 | 进行中 |
+| G：aarch64 验证 | 已完成（Docker 卷恢复后重新校验；干净基镜像经 AAVMF/TCG 启动，120 包与 43,648 个登记文件全部匹配，failed unit 为零） |
+| H：文档、CI 与交付 | 已完成（静态门禁、双架构运行门禁、最终哈希与问题记录均已固化；功能分支单独交付，未合并 `main`） |
 
 每完成一个阶段，应在本表更新状态，并保留对应提交和可复查的测试结果。
+
+### 7.1 最终产物证据
+
+| 架构 | rootfs SHA-256 | qcow2 SHA-256 | 真实启动门禁 |
+| --- | --- | --- | --- |
+| x86_64 | `c910ca7a4f2c9c2ed40776cf026ef36c2c33ad083d0d1adf122672a4c6aa2cdf` | `a995a1d3bd4b538419471c105a5c6867e157ddf927553612de9b98a1c0a4e205` | OVMF/TCG；120 包；49,028/49,028 文件匹配；XFS on `vg0/root`；failed unit 为零 |
+| aarch64 | `70e35cc97872c5e002aa908367c8bee10b288bb8a8b8f3f7ca1936edef751e36` | `88491e4646e9450d0b598f5e99078b231d3c780eedc522f5f45a00e1a7944a00` | AAVMF/TCG；120 包；43,648/43,648 文件匹配；XFS on `vg0/root`；failed unit 为零 |
+
+两个启动门禁都只写临时 qcow2 overlay；正常关机后删除 overlay，再次计算的基础镜像哈希与启动前一致。
 
 ## 8. 实施问题记录
 
@@ -231,8 +240,9 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | 受限 x86_64 构建机自带 PRoot 5.1.0，目标 glibc 的 `faccessat2` 路径检查不受支持 | 内核文件真实存在且 `stat` 可见，但 mkinitcpio 的 Bash `-r` 判断错误，导致 initramfs trigger 失败 | 固定使用 PRoot 5.4.0（首次加入 `faccessat2`），包装器规范化 rootfs 绝对路径；从空 rootfs 重装 120 包及三项触发器一次成功 | 已修复；构建环境要求已写入安装文档 |
 | xmake 的真实二进制安装为 `xmake.real`，Stage1 wrapper 刷新后缺少 `xmake` 入口 | 构建完成的 channel 无法经 Sage profile 调用 xmake | wrapper 目录在存在 `xmake.real` 时创建同目录 `xmake` 链接；fixture 与真实 x86_64 toolchain 均通过 | 已修复；属于本仓库工具隔离问题 |
 | QEMU smoke test 在终端回显的命令文本里提前匹配 `SCLINUX_GATE_PASS` | 来宾命令尚未执行就可能被误报为通过，无法证明 Sage、SHC 或 failed-unit 门禁 | 登录后先关闭 TTY echo，再发送 gate；只有来宾实际输出 PASS 才关机，失败则打印 unit 诊断并返回非零 | 已修复；真实门禁已揭示并阻止 oomd 问题 |
-| systemd-oomd 默认启用但 base-files 缺少 `systemd-oom` 用户和组 | QEMU 启动到 multi-user 后 unit 以 `217/USER` 反复失败 | base-files release 6 固定 UID/GID 994；x86_64 最终 overlay 启动后 Sage verify 49,028/49,028，failed unit 为零 | 已修复；aarch64 将由同一 base-files 包复验 |
-| macOS 数据卷写满导致 Docker 在 ARM rootfs 导出时退出 | 首次远端流式导出只得到 559 MiB `.part`；第二次本地归档触发 Docker VM ext4 `potential data loss`，不得沿用此前 ARM 卷校验结论 | 两次失败归档均与成品隔离并删除本地残片；恢复 Docker 后必须从卷内重跑包数、Sage verify、ELF 架构与引导文件门禁，随后直接流式传输并在远端执行 zstd 与 SHA-256 校验 | 环境阻塞；等待本机释放足够空间后复验 |
+| ARM64 在 x86_64 TCG 下的完整校验超过 QEMU smoke 固定的 600 秒等待上限 | 第一轮已进入来宾并执行 `sage verify`，但 expect 先超时，测试框架错误中止 QEMU | 支持正整数 `SCLINUX_QEMU_TIMEOUT`，默认仍为 600 秒；以 1800 秒从干净 overlay 重跑，43,648/43,648 文件匹配并正常关机 | 已修复并记录构建环境用法 |
+| systemd-oomd 默认启用但 base-files 缺少 `systemd-oom` 用户和组 | QEMU 启动到 multi-user 后 unit 以 `217/USER` 反复失败 | base-files release 6 固定 UID/GID 994；双架构最终 overlay 启动后 Sage verify 全通过，failed unit 均为零 | 已修复并完成双架构复验 |
+| macOS 数据卷写满导致 Docker 在 ARM rootfs 导出时退出 | 首次远端流式导出只得到 559 MiB `.part`；第二次本地归档触发 Docker VM ext4 `potential data loss`，不得沿用此前 ARM 卷校验结论 | 两次失败归档均与成品隔离并删除本地残片；恢复 Docker 后从卷内重跑包数、43,648 文件 Sage verify、ELF 架构与引导门禁；分块上传后的远端归档通过 zstd 与 SHA-256 校验 | 已恢复并完成独立复验 |
 | systemd 首次启动时 IMDS generator 早于 hardware database 重建 | 串口日志出现一次缺少 hwdb 的 generator 警告，但 hardware database 随后成功生成 | 启动门禁检查 `systemctl --failed` 为空，且登录、包校验与正常关机均通过 | 已记录为首次启动日志噪声，不影响交付门禁 |
 | libguestfs appliance 未包含主机后装的 `thin_check` | 组装时 LVM 跳过 appliance 内部 thin metadata 预检并打印警告 | 最终镜像仍通过 `qemu-img check`，并在真实来宾内激活 thin pool、挂载 XFS、完成启动与关机 | 已用独立结构检查和运行门禁覆盖 |
 | 本机缺少可用 Docker daemon，磁盘余量也不足以同时保留双架构全量构建 | 无法在 macOS 本机高效完成 x86_64 Stage1；x86_64 还会退化到 TCG | 使用独立 x86_64 Linux 构建机完成原生全量构建，本机只跑快速静态测试 | 已规避；最终验收仍需回到统一入口重放 |
@@ -251,7 +261,7 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | `sage install A B` 对全部包共用一笔 LMDB 写事务 | A 已写盘后 B 预检失败会回滚 A 的数据库记录，使 A 变成幽灵文件 | orphan prune 独立提交，每个成功解包包各自提交 LMDB；A 成功、B 冲突的回归确认 A 的文件与记录同时保留，B 均不存在 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage 只按包名保存归档路径 | 仓库同时存在多个版本时，solver 可能选中 2.0、实际解压 1.0，却把 LMDB 记录成 2.0；direct 1.0 也可能被仓库 2.0 的候选替换 | 归档按包名、版本/release、架构、channel 完整身份索引；direct 包锁定精确版本；解包器第二遍写入前再次核对所选身份；多版本、direct、错配归档和同包升级回归均通过 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | 两个 Sage 包包含同一普通文件时会静默覆盖 | 路径预检允许普通文件替换普通文件，`register_files()` 又直接覆盖 LMDB owner，先装包的文件和归属同时丢失 | 只读 inspect 收集真实 data 路径；在同一 LMDB 写事务内、解包前检查 owner，跨包冲突 fail closed，同包升级放行；注册函数自身再做原子复检 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
-| 新的文件所有权门禁揭示现有拆分包有 3,228 个非目录路径重叠 | `xz` 首先因 locale 与 `xz-libs` 重叠而中止；全量审计又发现 ncurses terminfo、PCRE2 文档/工具、util-linux/e2fsprogs 库文件及少量 man/config 冲突 | 按包职责收紧 14 个配方的 install 清理或重命名规则并提升 release；14 个 x86_64 包已重建，全仓审计只剩 Sage 特例 `usr/share/info/dir`；PR #8 最终基线已接入 | 配方与归档已修复；全新 v6 rootfs 复验进行中 |
+| 新的文件所有权门禁揭示现有拆分包有 3,228 个非目录路径重叠 | `xz` 首先因 locale 与 `xz-libs` 重叠而中止；全量审计又发现 ncurses terminfo、PCRE2 文档/工具、util-linux/e2fsprogs 库文件及少量 man/config 冲突 | 按包职责收紧 14 个配方的 install 清理或重命名规则并提升 release；14 个冲突包重建后全仓审计只剩 Sage 特例 `usr/share/info/dir`；双架构全新 120 包 rootfs 均通过完整校验 | 配方、归档与最终 rootfs 均已修复 |
 | Sage 每包提交后仍把激活、FHS profile 和 triggers 延迟到整组安装成功 | A 已完成文件和 LMDB 提交后，B 失败会直接返回，导致 A 成为“已安装但未后处理”的半成品 | 每个包提交后立即完成 toolchain 激活、profile 重建和该包 triggers；整组成功后保留聚合 trigger pass；A 成功、B 失败回归确认 A 的 profile 与激活链接存在 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage extractor 接受 `..` data 路径，并可能沿归档内或既有符号链接逃出 `--root` | 恶意包可写入 sysroot 外部，且旧 probe 路径会在正式安装前触发风险 | 拒绝绝对路径、`..`、重复/不支持条目；拒绝归档 symlink 父路径并解析既有父链接的 root containment；三类越界回归均在写盘前失败 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
 | Sage 把文件名中的反斜杠原样写入 TOML，查询又静默跳过解析失败项 | systemd 的 `system-systemd\\x2d...` 路径破坏 LMDB 清单；部分成功列表还会让 install 把该包 ownership 当孤儿清理，`query info` 则误报未安装 | manifest 与 repo index 统一转义；installed 列表和单包读取均改为 `expected`，让 install/remove/query/rebuild fail closed；损坏 LMDB fixture 确认 ownership 不变并返回数据库损坏 | 已修复；[Sage PR #8](https://github.com/antinomie1/sage/pull/8) |
@@ -261,17 +271,17 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | 最新 `main` 的 Extra recipes 使用 `[[capability_hooks]]`，但 recipe validator 仍将其判为未知键 | `c49d13b` 的 GitHub Actions 失败，新增 grub/mkinitcpio 配方无法通过仓库自身门禁 | 校验器按 Sage 实际解析范围支持顶层和 `[package]` hooks，并校验 capability、exec、args；fixtures 39/39、全树 315/315 通过 | 已在本分支修复；待独立 PR 回补 `main` |
 | 多架构分支与最新 `main` 分叉 15/58 个提交 | `main` 新增 Stage2/Extra 与 checksum 修复，直接继续会让最终合并积累冲突 | 将 `c49d13b` 合入功能分支；保留已验证的 Zen 源码，吸收官方 man-pages 镜像和零债务哨兵文件 | 已解决；未合并回 `main` |
 | 构建机的 libguestfs/supermin 找不到可用于 appliance 的宿主内核 | `guestfish run` 无法启动，因而不能在无 device-mapper 权限的容器中组装真实磁盘布局 | 安装发行版 `linux-image-virtual` 后以 direct/TCG 后端完成 64 MiB qcow2 读写 smoke test | 已修复构建环境；不进入最终镜像 |
-| systemd 包有 `bootctl`，但没有 systemd-boot EFI 文件 | 当前配方未启用 `efi`/`bootloader`，且缺少构建所需的 pyelftools | 增加固定源码的 pyelftools，并显式启用 EFI/bootloader 与 sclinux SBAT 元数据；x86_64 包已核对 `systemd-bootx64.efi` | 已修复；aarch64 对应文件待该架构构建复验 |
+| systemd 包有 `bootctl`，但没有 systemd-boot EFI 文件 | 当前配方未启用 `efi`/`bootloader`，且缺少构建所需的 pyelftools | 增加固定源码的 pyelftools，并显式启用 EFI/bootloader 与 sclinux SBAT 元数据；双架构 EFI 文件均进入镜像并由 OVMF/AAVMF 启动 | 已修复并完成双架构复验 |
 | systemd 从 Stage1 的 `dbus-1.pc` 读到带 sysroot 的绝对安装目录 | EFI 版 systemd 首次重建成功后，包路径审计发现 `pkg/root/.../build-sysroot/usr/share/dbus-1/services` | 显式固定 policy、session、system-service 与 interfaces 四个 D-Bus 目录，并增加回归测试；重建包路径正常 | 已修复；属于本仓库配方问题 |
 | xfsprogs 选中宿主 GNU Make 4.3，无法继承 Stage1 GNU Make 4.4 的 FIFO jobserver | configure 优先查找 `gmake`，Stage1 wrapper 仅提供 `make`，于是回退到宿主 `/usr/bin/gmake` | 为 Stage1 make wrapper 提供同运行时的 `gmake` 别名；同时固定 XFS udev 规则目录，避免 pkg-config sysroot 路径进入包 | 已修复；属于本仓库构建隔离问题 |
 | xfsprogs 首个成功包把 libhandle 安装到 x86 专用 `/usr/lib64`，并错误声明不存在的 `libxfs.so.0` | 上游默认启用 lib64 suffix；libxfs 是内部静态库，不是已安装共享 ABI | 禁用 lib64 suffix，统一安装到 `/usr/lib`，capability 改为实际存在的 `libhandle.so.1`；重建包内容与声明一致 | 已修复；属于本仓库配方问题 |
 | efivar 构建时直接运行目标 ELF `makeguids` | 目标程序需要 Stage1 glibc 2.44，Ubuntu 宿主 glibc 版本较旧 | 通过固定补丁让 makeguids 使用架构对应动态加载器和 Stage1 库路径执行 | 已修复；x86_64 重建通过 |
 | efibootmgr 默认 `-flto` 导致 lto-wrapper 绕过 GCC wrapper | LTO 子进程直接启动 Stage1 原始 GCC，再次落到宿主 glibc | 此小工具不依赖 LTO 语义，配方显式使用 `-O2 -g` 关闭 LTO并保留正常优化 | 已修复；x86_64 重建通过 |
-| LVM2 在缺少 cache/thin 元数据工具时仍推断出不存在的 `/usr/sbin/cache_*` 路径 | 运行时配置会声称存在未打包的检查和修复工具；thin 路径已留空但 cache 路径未固定 | 配方显式把两类外部工具的 check、dump、repair、restore 路径全部留空；目标 ELF 配置查询已确认八个路径为空 | 配置已修复；真实 LVM thin 激活待启动验收 |
+| LVM2 在缺少 cache/thin 元数据工具时仍推断出不存在的 `/usr/sbin/cache_*` 路径 | 运行时配置会声称存在未打包的检查和修复工具；thin 路径已留空但 cache 路径未固定 | 配方显式把两类外部工具的 check、dump、repair、restore 路径全部留空；目标 ELF 配置查询已确认八个路径为空，双架构真实启动均激活 thin pool | 已修复并完成运行验收 |
 | `stage1-run` 直接读取旧的 rendered recipe，canonical recipe 更新后仍可能成功打出旧 release | 增量重建不会自动刷新工作区，退出码无法证明新配方已经进入产物 | 运行前逐文件比较 canonical 渲染结果与工作区 recipe/helper；不一致时拒绝构建并提示重跑 `stage1-recipes` | 已修复；属于本仓库增量构建正确性问题 |
 | `stage1-run --workspace` 接受相对路径但原样传给会切换工作目录的 Sage | prepare 进入源码目录后，相对 `$RECIPE_DIR` 指向错误位置，release 10 首次增量重建在应用补丁前退出 | `run_stage1_packages` 在读取 recipes/sources 前统一解析 workspace 与显式 sysroot；新增相对路径回归门禁，并用同一相对命令重跑 | 已修复；属于本仓库路径规范化问题 |
 | 目标 sysroot 原生重建时把 `/` 本身当成禁止泄漏路径 | `--sysroot /` 使任意 payload 和正常 `#!/usr/bin/*` shebang 都被误判，已完成的 `file-libs` 包在归档后仍失败 | 路径与 shebang 校验仅跳过无信息量的根目录，仍严格检查 workspace；新增原生根回归并在目标 glibc chroot 重建 | 已修复；属于本仓库原生自举边界问题 |
 | 临时目标 chroot 未挂载 `/dev`，Tcl configure 把 `/dev/null` 创建成普通文件 | 本应丢弃的 cache diff 被 shell 当作空 heredoc 输入写回 `config.status`，表现为脚本混入 `0a1,63` 后语法错误 | 删除污染的普通文件，并只在临时验收 chroot 建立标准 null/zero/random/urandom 字符设备；保留配方原并行语义 | 已规避；属于手工验收环境缺陷，不进入产物 |
-| 交付 initramfs 使用 `autodetect` 会按云构建机硬件裁剪驱动 | 产物可能漏掉 UTM/QEMU 所需的 IDE、virtio 或架构特定存储模块，构建成功仍无法挂载根卷 | 交付配置移除 `autodetect`，由 `block`、`lvm2`、`filesystems` hook 收入可移植模块集；真实内容待 rootfs 阶段检查 | 已修复配置；待 initramfs 与双虚拟机启动复验 |
+| 交付 initramfs 使用 `autodetect` 会按云构建机硬件裁剪驱动 | 产物可能漏掉 UTM/QEMU 所需的 IDE、virtio 或架构特定存储模块，构建成功仍无法挂载根卷 | 交付配置移除 `autodetect`，由 `block`、`lvm2`、`filesystems` hook 收入可移植模块集；双架构 initramfs 内容检查与真实启动均通过 | 已修复并完成双架构复验 |
 | 启动包的卷组名和 ESP 默认挂载点偏离安装规范 | 内核参数寻找 `/dev/mapper/sclinux-root`，镜像规范实际创建 `vg0/root`；更新脚本默认写 `/efi` 而规范挂载 `/boot/efi` | 统一为 `root=/dev/mapper/vg0-root rd.lvm.lv=vg0/root` 和 `/boot/efi`，并增加双架构渲染回归检查 | 已修复；属于本仓库启动契约问题 |
-| mkinitcpio 已带 LVM2 hook，但基础包集此前缺少 LVM2 与 XFS 用户态工具 | 无法生成可激活 XFS-on-LVM-thin 根卷的 initramfs | 已补齐 LVM2、XFS 与镜像工具配方，x86_64 锁文件为 120 个唯一包；继续以 initramfs 内容检查和真实启动验证收口 | 包闭包已修复；真实 initramfs 待 rootfs 阶段验证 |
+| mkinitcpio 已带 LVM2 hook，但基础包集此前缺少 LVM2 与 XFS 用户态工具 | 无法生成可激活 XFS-on-LVM-thin 根卷的 initramfs | 已补齐 LVM2、XFS 与镜像工具配方；双架构均为 120 个唯一包，并在真实启动中激活 XFS-on-LVM-thin 根卷 | 包闭包与运行验收均已完成 |
