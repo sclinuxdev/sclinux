@@ -22,7 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 1. 这个仓库是什么
 
-**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 Linux 发行版。
+**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 + aarch64 双架构 Linux 发行版；
+双架构实现由 GitHub PR #4 交付。
 本仓库存放**配方与政策**，不存放源码 tarball，也不存放二进制包。
 
 | 路径 | 内容 |
@@ -36,8 +37,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `scripts/shc` | `sage` 的简写前端，装为 `/usr/bin/shc` |
 | `tests/` | CI 校验器（配方 schema、markdown 链接、shc 行为） |
 
-包管理器 `sage` 本身是**上游独立项目**（<https://github.com/antinomie1/sage>，
-BSD-2-Clause），不在本仓库内；本仓库是 BSD-3-Clause。
+包管理器 `sage` 在独立仓库 <https://github.com/sclinuxdev/sage> 开发
+（GitHub `isFork: false`，BSD-2-Clause），不在本仓库内；本仓库是 BSD-3-Clause。
 
 ---
 
@@ -140,18 +141,22 @@ sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信�
 - **CLI 通道管理**：`sage channel add <NAME> <PATH>` / `sage channel sync <NAME>` /
   `sage install --channel <NAME> <PKG>` 均已实现。`sage channel list` 列出已配置通道。
 - **构建期自校验**：`sage build` 扫描产物 ELF 的 `DT_SONAME` 写入 `provides`，
-  校验 `DT_NEEDED` 能否被已声明的 `build_dependencies` 满足，在打包前拦截缺失依赖。
+  并用宿主 LMDB 中 `host_db->get_provider("so:" + soname)` 查询已安装包能否
+  满足 `DT_NEEDED`；缺失时在打包前拦截，可用 `--no-elf-check` 显式跳过
+  （sage `src/cli/build.cppm:613-638`）。
 
 **两级能力模型**：
 
 - **排他能力**（exclusive）：同一能力最多一个提供者安装，切换是重配置操作
   （`sage rebuild` 更新 `/var/lib/sage/system.toml [providers]` 并重跑触发器）。
-  例：`virtual/init`、`virtual/udev`、`virtual/libc`。
+  例：`virtual/init`、`virtual/udev`、`virtual/libc`、`virtual/coreutils`。
 - **共存能力**（shared）：提供者可共存，`[providers]` 仅记录求解器的默认选择，
   不排他。例：`virtual/kernel`、`virtual/initramfs-generator`、所有 `so:*`。
 
-排他性是**选入**的：`/etc/sage/capabilities.toml` 的 `[capabilities.<name>]` 加
-`exclusive = true`。未声明的能力默认共存。
+排他性是**选入**的：`/etc/sage/system.toml` 的 `[capabilities]` 表
+把能力名映射为字符串 `"exclusive"` 或 `"shared"`。除默认排他的核心能力外，
+未声明的能力按 shared 处理
+（sage `src/model/config.cppm:121,201-211`）。
 
 ### 4.4 `--root` 时的路径推导
 
@@ -198,8 +203,9 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
    `linux-zen-headers`→`linux-headers`/`virtual/linux-headers`。
 6. **Meta 包**只聚合依赖、不含文件（`base` 就是，172 条依赖）。
 
-排他性通过 `/etc/sage/capabilities.toml` 的 `[capabilities.<name>] exclusive = true` 声明，
-未声明的能力默认共存。`virtual/init`/`virtual/udev`/`virtual/libc` 是排他；
+排他性通过 `/etc/sage/system.toml` 的 `[capabilities]` 表声明，值为
+`"exclusive"` 或 `"shared"`；未声明的能力默认共存。`virtual/init`/`virtual/udev`/
+`virtual/libc`/`virtual/coreutils` 是排他；
 `virtual/kernel`/`virtual/initramfs-generator`/`virtual/bootloader` 是共存。
 
 ---
@@ -216,8 +222,14 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 | `/usr` merge | `/bin` `/sbin` `/lib` `/lib64` 全部软链到 `/usr/*` | **极高** |
 | libc | glibc | **极高**（musl 需并存第二套包集，机制支持但不提供） |
 | init | systemd | **低**（`service.toml` 与 init 解耦，`sage rebuild` 重生成脚本） |
-| 架构 | x86_64 单一 | 高 |
+| 架构 | x86_64 + aarch64 双架构 | 高 |
 | 发布模式 | 滚动，不做定版 | 高 |
+
+双架构政策已经裁决；待合并的 GitHub PR #4 就是这次“高代价”变更本身：
+10 个配方含 38 处 `@SC_*@`
+占位符，`config/architectures.toml` 为每个架构固定 21 个字段，aarch64
+内核配置共 1,987 行，72 条架构断言通过。aarch64 qcow2 已在 AAVMF 下真实启动
+（SHA-256 `88491e46…`），最终 rootfs 中 43,648/43,648 个文件匹配包管理器记录。
 
 配方来源不作硬性规定。Arch 的 PKGBUILD 可以拿来当参考 —— 它的 configure
 参数、补丁集与编译选项是社区长期踩坑的产物，`*.pkg.tar.zst` 也本就沿用
@@ -237,15 +249,15 @@ Stage2 包集部署时暴露的问题，以及 `Extra/` 树的修复状态（202
 
 | 缺陷 | 修复位置 | 状态 |
 | :--- | :--- | :--- |
-| **ELF 扫描不生成 provides** | sage 源码 `e02aaaf` | ✅ 已修复 |
-| **构建期不校验 `DT_NEEDED`** | sage 源码 `e02aaaf` | ✅ 已修复 |
+| **ELF 扫描不生成 provides** | sage `src/cli/build.cppm:512-562` | ✅ 已修复 |
+| **构建期不校验 `DT_NEEDED`** | sage `src/cli/build.cppm:589-640` | ✅ 已修复 |
 | **仓库缺 device-mapper / icu** | `Extra/recipes/{device-mapper,icu}*/` | ✅ 已添加 |
 | **xfsprogs 误链宿主库** | `Extra/recipes/xfsprogs/` (release 3) | ✅ 已修复 |
 | **配方往 `/usr/sbin` 装** | `Extra/recipes/{util-linux,dosfstools,xfsprogs}/` | ✅ 已修复 |
 | **grub 只有 BIOS 平台** | `Extra/recipes/grub/` (release 3, UEFI-only) | ✅ 已修复 |
 | **仓库缺 tzdata / busybox / sudo** | `Extra/recipes/{tzcode,tzdata,busybox,sudo}/` | ✅ 已添加 |
 | **`hostname` 双重提供** | `Extra/recipes/inetutils/` (release 3, `--disable-hostname`) | ✅ 已修复 |
-| **缺 initramfs / 引导器触发器** | sage 源码 `945605c` + `Extra/recipes/{mkinitcpio,grub}/` | ✅ 已修复 |
+| **缺 initramfs / 引导器触发器** | sage `src/sys/rebuild.cppm:147-195,248-300` + `Extra/recipes/{mkinitcpio,grub}/` | ✅ 已修复 |
 
 **mkinitcpio 41.1 遗留问题**（配方已打补丁缓解）：
 
