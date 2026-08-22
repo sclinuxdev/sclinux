@@ -694,6 +694,18 @@ def main() -> int:
             ),
             True,
         )
+        # The mime-database trigger shells out to /usr/bin/update-mime-database,
+        # which only shared-mime-info provides and this tree does not package.
+        # Sage fails a transaction whose trigger executable is absent, so the
+        # single io.systemd.xml systemd drops there would fail every install.
+        failed += not check(
+            "Stage1 systemd ships no mime directory while shared-mime-info is unpackaged",
+            any(
+                "rm -rf $DESTDIR/usr/share/mime" in command
+                for command in systemd["source"]["install"]
+            ),
+            True,
+        )
         failed += not check(
             "Stage1 systemd keeps D-Bus install paths outside the build sysroot",
             all(
@@ -1565,7 +1577,7 @@ def main() -> int:
         [],
     )
 
-    total = 90
+    total = 91
     print(f"\n{total - failed} passed, {failed} failed")
     return 1 if failed else 0
 
