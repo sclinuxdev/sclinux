@@ -1262,6 +1262,41 @@ def main() -> int:
             [(True, True), (True, True)],
         )
 
+        containing_input_results = []
+        for input_name in ("recipes", "sources"):
+            containing_workspace = Path(directory) / f"containing-{input_name}"
+            containing_workspace.mkdir()
+            external_sysroot = Path(directory) / f"external-sysroot-{input_name}"
+            external_input = external_sysroot / "managed-input"
+            external_input.mkdir(parents=True)
+            (external_sysroot / ".stage1-build-packages").mkdir()
+            external_sentinel = external_input / "input-data"
+            external_sentinel.write_bytes(payload)
+            (containing_workspace / input_name).symlink_to(
+                external_input, target_is_directory=True
+            )
+            try:
+                build.reset_stage1_build_sysroot(
+                    external_sysroot,
+                    containing_workspace / "build-sysroot",
+                    containing_workspace,
+                )
+            except build.ConfigError as exc:
+                containing_input_error = str(exc)
+            else:
+                containing_input_error = "no error"
+            containing_input_results.append(
+                (
+                    "must not overlap workspace inputs" in containing_input_error,
+                    external_sentinel.is_file(),
+                )
+            )
+        failed += not check(
+            "Stage1 rejects sysroots containing linked recipe and source inputs",
+            containing_input_results,
+            [(True, True), (True, True)],
+        )
+
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
         fixture_recipe.parent.mkdir()
         fixture_recipe.write_text(

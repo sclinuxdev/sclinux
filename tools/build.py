@@ -766,7 +766,10 @@ def reset_stage1_build_sysroot(
     managed_inputs = tuple(
         (workspace / directory).resolve() for directory in ("recipes", "sources")
     )
-    if any(sysroot == path or path in sysroot.parents for path in managed_inputs):
+    if any(
+        sysroot == path or path in sysroot.parents or sysroot in path.parents
+        for path in managed_inputs
+    ):
         raise ConfigError(
             f"Stage1 build sysroot must not overlap workspace inputs: {sysroot}"
         )
