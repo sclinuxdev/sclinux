@@ -751,6 +751,21 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         archive.unlink()
 
 
+def reset_stage1_build_sysroot(sysroot: Path, default_sysroot: Path) -> None:
+    if sysroot.is_symlink() or (sysroot.exists() and not sysroot.is_dir()):
+        raise ConfigError(
+            f"Stage1 build sysroot must be a directory, not a symlink: {sysroot}"
+        )
+    stamps = sysroot / ".stage1-build-packages"
+    if sysroot.exists() and sysroot != default_sysroot and not stamps.is_dir():
+        raise ConfigError(
+            f"refusing to reset an unrecognized Stage1 build sysroot: {sysroot}"
+        )
+    if sysroot.exists():
+        shutil.rmtree(sysroot)
+    sysroot.mkdir(parents=True)
+
+
 def validate_stage1_package_paths(
     recipe_dir: Path, forbidden_roots: list[Path]
 ) -> None:
@@ -945,6 +960,8 @@ def run_stage1_packages(
     validate_stage1_procfs()
     workspace = workspace.resolve()
     if sysroot is not None:
+        if sysroot.is_symlink():
+            raise ConfigError(f"Stage1 build sysroot must not be a symlink: {sysroot}")
         sysroot = sysroot.resolve()
     manifest = load_stage1_manifest()
     packages = select_stage1_packages(manifest, first, last)
@@ -959,12 +976,18 @@ def run_stage1_packages(
             if entry is not None:
                 locked_by_name[name] = entry
     built = []
-    sysroot = sysroot or workspace / "build-sysroot"
+    default_sysroot = workspace / "build-sysroot"
+    sysroot = sysroot or default_sysroot
+    preceding = manifest[: manifest.index(packages[0])]
+    missing = [name for name in preceding if name not in locked_by_name]
+    if missing:
+        raise ConfigError(
+            "cannot resume Stage1; preceding package artifact(s) are missing: "
+            + ", ".join(missing)
+        )
+    reset_stage1_build_sysroot(sysroot, default_sysroot)
     environment = stage1_build_environment(sysroot=sysroot)
-    selected = set(packages)
-    for name in manifest:
-        if name in selected or name not in locked_by_name:
-            continue
+    for name in preceding:
         stage_stage1_package(
             locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
         )

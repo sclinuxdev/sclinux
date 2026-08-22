@@ -60,6 +60,15 @@ def main() -> int:
         "vg_name=vg0" in image_assembler and "SCLINUX_VG_NAME" not in image_assembler,
         True,
     )
+    failed += not check(
+        "image assembler isolates its working VG from a host vg0",
+        'work_vg_name="sclinux_image_$$"' in image_assembler
+        and 'target vgcreate --devices "$lvm_partition" "$work_vg_name"'
+        in image_assembler
+        and 'target vgrename --devices "$lvm_partition" "$work_vg_name" "$vg_name"'
+        in image_assembler,
+        True,
+    )
     architectures = build.load_architectures()
     failed += not check(
         "repository declares exactly the two target architectures",
@@ -1071,6 +1080,62 @@ def main() -> int:
             "Stage1 rejects reversed package ranges",
             range_error,
             "Stage1 package range is reversed",
+        )
+
+        resume_workspace = Path(directory) / "resume-workspace"
+        resume_recipes = resume_workspace / "recipes"
+        resume_names = ["one", "two", "three"]
+        for name in resume_names:
+            recipe_dir = resume_recipes / name
+            recipe_dir.mkdir(parents=True)
+            (recipe_dir / "recipe.toml").write_text(
+                "[package]\n"
+                f'name = "{name}"\n'
+                'version = "1.0"\n'
+                'release = "1"\n'
+                'arch = "aarch64"\n\n'
+                "prepare = []\n"
+                "build = []\n"
+                "install = []\n"
+            )
+        for name in ("one", "three"):
+            (resume_recipes / name / f"{name}-1.0-1-aarch64.pkg.tar.zst").write_bytes(
+                payload
+            )
+        resume_sysroot = resume_workspace / "build-sysroot"
+        resume_sysroot.mkdir(parents=True)
+        stale_sysroot_file = resume_sysroot / "stale-from-later-package"
+        stale_sysroot_file.write_bytes(payload)
+        resumed_artifact = resume_recipes / "two/two-1.0-1-aarch64.pkg.tar.zst"
+        staged_names = []
+        reset_observations = []
+
+        def record_staged_package(entry, *_args, **_kwargs):
+            staged_names.append(entry["name"])
+            reset_observations.append(not stale_sysroot_file.exists())
+
+        def create_resumed_artifact(command, **_kwargs):
+            resumed_artifact.write_bytes(payload)
+            return subprocess.CompletedProcess(command, 0)
+
+        with (
+            mock.patch.object(build, "validate_stage1_procfs"),
+            mock.patch.object(build, "load_stage1_manifest", return_value=resume_names),
+            mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            mock.patch.object(build, "stage1_build_environment", return_value={}),
+            mock.patch.object(build, "refresh_stage1_tool_wrappers"),
+            mock.patch.object(
+                build, "stage_stage1_package", side_effect=record_staged_package
+            ),
+            mock.patch.object(build.subprocess, "run", side_effect=create_resumed_artifact),
+        ):
+            resumed = build.run_stage1_packages(
+                {"arch": "aarch64"}, resume_workspace, first="two", last="two"
+            )
+        failed += not check(
+            "Stage1 resume recreates its sysroot and stages only preceding artifacts",
+            ([entry["name"] for entry in resumed], staged_names, reset_observations),
+            (["two"], ["one", "two"], [True, True]),
         )
 
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
