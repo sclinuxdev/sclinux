@@ -49,6 +49,17 @@ def config_error(text: str) -> str:
 
 def main() -> int:
     failed = 0
+    image_assembler = (REPO / "tools" / "assemble-image.sh").read_text()
+    failed += not check(
+        "image assembler resolves outputs below missing parent directories",
+        'output=$(readlink -m "$2")' in image_assembler,
+        True,
+    )
+    failed += not check(
+        "image assembler keeps its VG aligned with the packaged kernel command line",
+        "vg_name=vg0" in image_assembler and "SCLINUX_VG_NAME" not in image_assembler,
+        True,
+    )
     architectures = build.load_architectures()
     failed += not check(
         "repository declares exactly the two target architectures",

@@ -8,11 +8,11 @@ if [ "$#" -ne 2 ]; then
 fi
 
 rootfs=$(readlink -f "$1")
-output=$(readlink -f "$2")
+output=$(readlink -m "$2")
 disk_size=${SCLINUX_DISK_SIZE:-16G}
 root_size=${SCLINUX_ROOT_SIZE:-10G}
 home_size=${SCLINUX_HOME_SIZE:-4G}
-vg_name=${SCLINUX_VG_NAME:-vg0}
+vg_name=vg0
 loop_device=
 mount_root=
 vg_active=false
