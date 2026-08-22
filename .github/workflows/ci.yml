@@ -21,6 +21,9 @@ jobs:
       - name: shell lint
         run: shellcheck -s sh scripts/shc tests/test-shc.sh
 
+      - name: architecture build config
+        run: python3 tests/test-build.py
+
       # Field names and types are checked against what sage's parse_toml
       # actually reads; an unknown key is silently ignored by sage, so it is
       # almost always a typo.

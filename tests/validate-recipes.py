@@ -11,6 +11,7 @@ others. See docs/SAGE_DESIGN.md §4.
     python3 tests/validate-recipes.py
 """
 
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -21,8 +22,12 @@ REPO = Path(__file__).resolve().parent.parent
 # unpacked from a source tarball would otherwise be validated as if it were
 # ours.
 BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
+GENERATED_TOP_LEVEL_DIRS = {"out"}
 
 MISSING_CHECKSUM = "[source] sha256 is required whenever url is set"
+INVALID_CHECKSUM = "[source] sha256 must be exactly 64 lowercase hexadecimal characters"
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+PACKAGE_ARCHITECTURES = {"x86_64", "aarch64", "any"}
 
 # Recipes grandfathered in with a `sha256 = ""` placeholder, pinned BY PATH.
 #
@@ -72,8 +77,8 @@ SOURCE_STRINGS = ("url", "sha256")
 # Keys sage reads in each scope. Anything else is silently ignored by the
 # parser, which makes a typo look like it works.
 ALLOWED = {
-    "": {"schema_version", "package", "source", *MERGED},
-    "package": {*PACKAGE_STRINGS, *MERGED},
+    "": {"schema_version", "package", "source", "capability_hooks", *MERGED},
+    "package": {*PACKAGE_STRINGS, "capability_hooks", *MERGED},
     "source": {*SOURCE_STRINGS, *MERGED},
 }
 
@@ -111,6 +116,29 @@ def require_string(table: dict, field: str, scope: str, errors: list[str]) -> No
         )
 
 
+def check_capability_hooks(table: dict, scope: str, errors: list[str]) -> None:
+    hooks = table.get("capability_hooks")
+    if hooks is None:
+        return
+    if not isinstance(hooks, list):
+        errors.append(f"{scope_label(scope)} capability_hooks must be an array of tables")
+        return
+    for index, hook in enumerate(hooks):
+        label = f"{scope_label(scope)} capability_hooks[{index}]"
+        if not isinstance(hook, dict):
+            errors.append(f"{label} must be a table")
+            continue
+        unknown = sorted(set(hook) - {"capability", "exec", "args"})
+        if unknown:
+            errors.append(f"{label} unknown key(s): {', '.join(unknown)}")
+        for field in ("capability", "exec"):
+            if not isinstance(hook.get(field), str) or not hook[field]:
+                errors.append(f"{label} {field} must be a non-empty string")
+        args = hook.get("args", [])
+        if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+            errors.append(f"{label} args must be an array of strings")
+
+
 def validate(path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -131,6 +159,10 @@ def validate(path: Path) -> list[str]:
             errors.append(f"[package] {field} is required")
     for field in PACKAGE_STRINGS:
         require_string(pkg, field, "package", errors)
+    if isinstance(pkg.get("arch"), str) and pkg["arch"] not in PACKAGE_ARCHITECTURES:
+        errors.append(
+            "[package] arch must be one of: " + ", ".join(sorted(PACKAGE_ARCHITECTURES))
+        )
 
     src = data.get("source")
     if src is not None and not isinstance(src, dict):
@@ -144,6 +176,8 @@ def validate(path: Path) -> list[str]:
         scopes.append((src, "source"))
     for table, scope in scopes:
         check_scope(table, scope, errors)
+        if scope != "source":
+            check_capability_hooks(table, scope, errors)
 
     if src is not None:
         for field in SOURCE_STRINGS:
@@ -155,6 +189,8 @@ def validate(path: Path) -> list[str]:
         checksum = src.get("sha256")
         if not isinstance(checksum, str) or not checksum:
             errors.append(MISSING_CHECKSUM)
+        elif not SHA256.fullmatch(checksum):
+            errors.append(INVALID_CHECKSUM)
 
     # Emptiness is judged against the merged view, exactly as sage builds it.
     merged_phases = [
@@ -225,7 +261,7 @@ def discover_recipes() -> list[Path]:
     found = []
     for path in REPO.rglob("recipe.toml"):
         rel = path.relative_to(REPO)
-        if rel.parts[0] == ".git" or is_build_artifact(path):
+        if rel.parts[0] in {".git", *GENERATED_TOP_LEVEL_DIRS} or is_build_artifact(path):
             continue
         found.append(path)
     return sorted(found)
