@@ -19,7 +19,16 @@ build = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build)
 
 
+# Every check that runs is counted here. The summary used to print a
+# hand-maintained constant, which drifted to 90 against 147 call sites -- so the
+# "N passed" line was decoration and only "0 failed" carried information. Checks
+# inside loops each count once, which is what "ran" means.
+checks_run = 0
+
+
 def check(description: str, actual: object, expected: object) -> bool:
+    global checks_run
+    checks_run += 1
     if actual == expected:
         print(f"ok    {description}")
         return True
@@ -1577,8 +1586,7 @@ def main() -> int:
         [],
     )
 
-    total = 91
-    print(f"\n{total - failed} passed, {failed} failed")
+    print(f"\n{checks_run - failed} passed, {failed} failed")
     return 1 if failed else 0
 
 
