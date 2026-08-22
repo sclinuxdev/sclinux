@@ -22,7 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 1. 这个仓库是什么
 
-**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 + aarch64 双架构 Linux 发行版。
+**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 + aarch64 双架构 Linux 发行版；
+双架构实现由 GitHub PR #4 交付。
 本仓库存放**配方与政策**，不存放源码 tarball，也不存放二进制包。
 
 | 路径 | 内容 |
@@ -221,10 +222,11 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 | `/usr` merge | `/bin` `/sbin` `/lib` `/lib64` 全部软链到 `/usr/*` | **极高** |
 | libc | glibc | **极高**（musl 需并存第二套包集，机制支持但不提供） |
 | init | systemd | **低**（`service.toml` 与 init 解耦，`sage rebuild` 重生成脚本） |
-| 架构 | x86_64 + aarch64 双架构 | 高（已执行） |
+| 架构 | x86_64 + aarch64 双架构 | 高 |
 | 发布模式 | 滚动，不做定版 | 高 |
 
-双架构支持就是这次“高代价”变更本身：10 个配方含 38 处 `@SC_*@`
+双架构政策已经裁决；待合并的 GitHub PR #4 就是这次“高代价”变更本身：
+10 个配方含 38 处 `@SC_*@`
 占位符，`config/architectures.toml` 为每个架构固定 21 个字段，aarch64
 内核配置共 1,987 行，72 条架构断言通过。aarch64 qcow2 已在 AAVMF 下真实启动
 （SHA-256 `88491e46…`），最终 rootfs 中 43,648/43,648 个文件匹配包管理器记录。
