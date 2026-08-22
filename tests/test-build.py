@@ -1172,6 +1172,35 @@ def main() -> int:
             (["two"], ["two"], 0),
         )
 
+        (resume_workspace / ".stage1-build-packages").mkdir()
+        try:
+            with (
+                mock.patch.object(build, "validate_stage1_procfs"),
+                mock.patch.object(
+                    build, "load_stage1_manifest", return_value=resume_names
+                ),
+                mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            ):
+                build.run_stage1_packages(
+                    {"arch": "aarch64"},
+                    resume_workspace,
+                    first="two",
+                    last="two",
+                    sysroot=resume_workspace,
+                )
+        except build.ConfigError as exc:
+            containing_sysroot_error = str(exc)
+        else:
+            containing_sysroot_error = "no error"
+        failed += not check(
+            "Stage1 rejects a scratch sysroot that contains its workspace",
+            (
+                "must not contain its workspace" in containing_sysroot_error,
+                (resume_recipes / "one/recipe.toml").is_file(),
+            ),
+            (True, True),
+        )
+
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
         fixture_recipe.parent.mkdir()
         fixture_recipe.write_text(

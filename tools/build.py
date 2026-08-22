@@ -751,9 +751,13 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
         archive.unlink()
 
 
-def reset_stage1_build_sysroot(sysroot: Path, default_sysroot: Path) -> None:
+def reset_stage1_build_sysroot(
+    sysroot: Path, default_sysroot: Path, workspace: Path
+) -> None:
     if sysroot == Path("/"):
         raise ConfigError("the native Stage1 root must not be reset as a scratch sysroot")
+    if sysroot == workspace or sysroot in workspace.parents:
+        raise ConfigError(f"Stage1 build sysroot must not contain its workspace: {sysroot}")
     if sysroot.is_symlink() or (sysroot.exists() and not sysroot.is_dir()):
         raise ConfigError(
             f"Stage1 build sysroot must be a directory, not a symlink: {sysroot}"
@@ -989,7 +993,7 @@ def run_stage1_packages(
             + ", ".join(missing)
         )
     if not native_sysroot:
-        reset_stage1_build_sysroot(sysroot, default_sysroot)
+        reset_stage1_build_sysroot(sysroot, default_sysroot, workspace)
     environment = stage1_build_environment(sysroot=sysroot)
     for name in preceding:
         stage_stage1_package(
