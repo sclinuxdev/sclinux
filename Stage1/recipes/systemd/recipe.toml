@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "systemd"
 version = "261.2"
-release = "4"
+release = "5"
 description = "System and service manager (init), udev, journald"
 license = "LGPL-2.1-or-later"
 channel = "system"
@@ -53,11 +53,12 @@ prepare = [
 
 build = [
     "mkdir -p build",
-    "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" meson setup .. --prefix=/usr --libdir=lib --buildtype=release -D default-dnssec=no -D firstboot=false -D install-tests=false -D ldconfig=false -D sysusers=false -D rpmmacrosdir=no -D homed=disabled -D man=disabled -D mode=release -D pamconfdir=no -D dev-kvm-mode=0660 -D nobody-group=nogroup -D sysupdate=disabled -D ukify=disabled -D dbuspolicydir=/usr/share/dbus-1/system.d -D dbussessionservicedir=/usr/share/dbus-1/services -D dbussystemservicedir=/usr/share/dbus-1/system-services -D dbus-interfaces-dir=/usr/share/dbus-1/interfaces -D efi=true -D bootloader=enabled -D sbat-distro=sclinux -D sbat-distro-generation=1 -D sbat-distro-version=261.2-4 -D sbat-distro-summary='ShenChen Linux' -D sbat-distro-url=https://github.com/sclinuxdev/sclinux -D docdir=/usr/share/doc/systemd-261.2",
+    "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" meson setup .. --prefix=/usr --sbindir=bin --libdir=lib --buildtype=release -D default-dnssec=no -D firstboot=false -D install-tests=false -D ldconfig=false -D sysusers=false -D rpmmacrosdir=no -D homed=disabled -D man=disabled -D mode=release -D pamconfdir=no -D dev-kvm-mode=0660 -D nobody-group=nogroup -D sysupdate=disabled -D ukify=disabled -D dbuspolicydir=/usr/share/dbus-1/system.d -D dbussessionservicedir=/usr/share/dbus-1/services -D dbussystemservicedir=/usr/share/dbus-1/system-services -D dbus-interfaces-dir=/usr/share/dbus-1/interfaces -D efi=true -D bootloader=enabled -D sbat-distro=sclinux -D sbat-distro-generation=1 -D sbat-distro-version=261.2-5 -D sbat-distro-summary='ShenChen Linux' -D sbat-distro-url=https://github.com/sclinuxdev/sclinux -D docdir=/usr/share/doc/systemd-261.2",
     "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" ninja -j$(nproc)",
 ]
 
 install = [
     "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" DESTDIR=$DESTDIR ninja install",
+    "if [ -d $DESTDIR/usr/sbin ]; then mv $DESTDIR/usr/sbin/* $DESTDIR/usr/bin/; rmdir $DESTDIR/usr/sbin; fi",
     "rm -rf $DESTDIR/usr/share/doc 2>/dev/null || true",
 ]

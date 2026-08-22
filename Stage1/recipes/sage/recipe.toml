@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "12"
+release = "13"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
@@ -35,8 +35,9 @@ build = [
 
 install = [
     "XMAKE_ROOT=y XMAKE_STATS=false xmake install -o \"$DESTDIR/usr\" -y",
+    "install -Dm755 ../shc \"$DESTDIR/usr/bin/shc\"",
 ]
 
 [source]
-url = "https://codeload.github.com/antinomie1/sage/tar.gz/8629fdf9eec6a559514e7335c8a59fe27b5cfc47"
-sha256 = "99a5fbda5c7d9adac210e5f6fe27896dde3efb85ee71da9c364a40ede13c530d"
+url = "https://codeload.github.com/sclinuxdev/sage/tar.gz/f2d18f7f30f5cdc690b9ebb288858ae04f3337df"
+sha256 = "95f67392824bb00048ccb5b012e094e4861e12f43f3b8ea335a2fd5e9b3f2860"

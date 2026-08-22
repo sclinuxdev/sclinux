@@ -9,4 +9,5 @@ library_path=$SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64:$SC_BUILD_SYS
 host_ldflags="-Wl,--dynamic-linker,$loader -Wl,--disable-new-dtags,-rpath,$library_path"
 target_runner="$loader --library-path $library_path"
 
+unset CPATH
 exec make HOSTLDFLAGS="$host_ldflags" SC_TARGET_RUNNER="$target_runner" "$@"

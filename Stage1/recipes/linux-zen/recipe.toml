@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "linux-zen"
 version = "7.1.9"
-release = "2"
+release = "4"
 description = "Linux ZEN kernel with performance optimizations for desktop, multimedia, and gaming"
 license = "GPL-2.0-only"
 channel = "system"
@@ -14,6 +14,7 @@ sha256 = "5ad158486eed44c2c09d948c25cdf60cab2f8515f2efd6df82eb862d5db67ad1"
 
 dependencies = [
     "kmod >= 34.0",
+    "virtual/initramfs-generator",
 ]
 
 build_dependencies = [
@@ -38,6 +39,7 @@ provides = [
 
 prepare = [
     "chmod +x ../make-stage1-kernel.sh",
+    "[ -f .prepared ] || patch -p1 < \"$RECIPE_DIR/objtool-no-procfs.patch\"",
     "[ -f .prepared ] || cp -v ../config.@SC_ARCH@ .config",
     "[ -f .prepared ] || sed -i 's#; $(objtool) $(objtool-args)#; $(SC_TARGET_RUNNER) $(objtool) $(objtool-args)#' scripts/Makefile.lib",
     "[ -f .prepared ] || echo '-1' > localversion.10-pkgrel",
@@ -65,5 +67,7 @@ install = [
     install -Dm644 System.map $DESTDIR/boot/System.map-${KVER}
     install -Dm644 .config $DESTDIR/boot/config-${KVER}
     install -Dm644 @SC_KERNEL_IMAGE@ $DESTDIR/usr/lib/modules/$KVER/vmlinuz
+    install -d $DESTDIR/etc/mkinitcpio.d
+    printf '%s\\n' 'ALL_config=/etc/mkinitcpio.conf' "ALL_kver=/usr/lib/modules/$KVER/vmlinuz" 'PRESETS=(default)' "default_image=/boot/initramfs-$KVER.img" > $DESTDIR/etc/mkinitcpio.d/linux-zen.preset
     """
 ]

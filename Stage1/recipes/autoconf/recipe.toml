@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "autoconf"
 version = "2.73"
-release = "2"
+release = "3"
 description = "GNU automatic configure script generator"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -33,4 +33,5 @@ build = [
 
 install = [
     "make install DESTDIR=$DESTDIR",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

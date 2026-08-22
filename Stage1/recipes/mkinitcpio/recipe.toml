@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "mkinitcpio"
 version = "41.1"
-release = "4"
+release = "8"
 description = "Modular initramfs image creation utility"
 license = "GPL-2.0-only"
 channel = "system"
@@ -49,5 +49,12 @@ build = [
 
 install = [
     "DESTDIR=$DESTDIR ninja -C build install",
-    "rm -f $DESTDIR/etc/mkinitcpio.conf",
+    "grep -rlZ 'LC_ALL=C.UTF-8' $DESTDIR/usr/bin/mkinitcpio $DESTDIR/usr/lib/initcpio | xargs -0 sed -i 's/LC_ALL=C.UTF-8/LC_ALL=C/g'",
+    "install -d $DESTDIR/etc",
+    "printf 'MODULES=()\nBINARIES=(/usr/bin/lvm /usr/bin/dmsetup)\nFILES=()\nHOOKS=(systemd modconf block lvm2 filesystems fsck)\nCOMPRESSION=\"zstd\"\n' > $DESTDIR/etc/mkinitcpio.conf",
 ]
+
+[[capability_hooks]]
+capability = "virtual/initramfs-generator"
+exec = "/usr/bin/mkinitcpio"
+args = ["-P"]

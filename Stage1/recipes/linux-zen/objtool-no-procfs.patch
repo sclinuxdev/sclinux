@@ -1,0 +1,14 @@
+--- a/tools/objtool/signal.c
++++ b/tools/objtool/signal.c
+@@ -20 +20 @@ static bool is_stack_overflow(void *fault_addr)
+-	return fault < stack_limit && fault >= stack_limit - 4096;
++	return stack_limit && fault < stack_limit && fault >= stack_limit - 4096;
+@@ -75,2 +75,6 @@ static int read_stack_limit(void)
+-		ERROR_GLIBC("fopen");
+-		return -1;
++		/*
++		 * Stage1 may run in a restricted build container without procfs.
++		 * Keep crash handling, but skip stack-overflow classification.
++		 */
++		stack_limit = 0;
++		return 0;

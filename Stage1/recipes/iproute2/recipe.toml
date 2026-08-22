@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "iproute2"
 version = "7.1.0"
-release = "2"
+release = "3"
 description = "IP routing and traffic control utilities (ip, ss, tc, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -33,5 +33,5 @@ build = [
 ]
 
 install = [
-    "make DESTDIR=$DESTDIR install",
+    "make DESTDIR=$DESTDIR SBINDIR=/usr/bin install",
 ]

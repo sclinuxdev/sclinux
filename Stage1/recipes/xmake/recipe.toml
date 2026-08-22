@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "xmake"
 version = "3.1.0"
-release = "4"
+release = "5"
 description = "Lightweight cross-platform C/C++ build utility based on Lua"
 license = "Apache-2.0"
 channel = "toolchain/xmake:3"
@@ -34,4 +34,6 @@ install = [
     "true # Safety net: xmake's Makefile keys on uppercase PREFIX; if it still fell back to /usr, relocate to the declared channel layout",
     "if [ -e \"$DESTDIR/usr/bin/xmake\" ] && [ ! -e \"$DESTDIR/opt/channels/xmake/3/bin/xmake\" ]; then mkdir -p \"$DESTDIR/opt/channels/xmake/3\"; mv \"$DESTDIR/usr/bin\" \"$DESTDIR/opt/channels/xmake/3/bin\"; mkdir -p \"$DESTDIR/opt/channels/xmake/3/share\"; mv \"$DESTDIR/usr/share/xmake\" \"$DESTDIR/opt/channels/xmake/3/share/xmake\"; rmdir \"$DESTDIR/usr/share\" \"$DESTDIR/usr/bin\" 2>/dev/null || true; fi",
     "[ -x \"$DESTDIR/opt/channels/xmake/3/bin/xmake\" ] || { echo 'ERROR: xmake not installed at /opt/channels/xmake/3/bin/xmake' >&2; exit 1; }",
+    "mv $DESTDIR/opt/channels/xmake/3/bin/xmake $DESTDIR/opt/channels/xmake/3/bin/xmake.real",
+    "install -m 755 $RECIPE_DIR/xmake-channel-wrapper.sh $DESTDIR/opt/channels/xmake/3/bin/xmake",
 ]

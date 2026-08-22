@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "util-linux-libs"
 version = "2.42.2"
-release = "2"
+release = "4"
 description = "libuuid/libblkid/libmount/libsmartcols shared libraries and headers"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -34,5 +34,6 @@ build = [
 install = [
     "make install DESTDIR=$DESTDIR",
     "rm -rf $DESTDIR/usr/share/locale $DESTDIR/usr/share/man",
+    "rm -rf $DESTDIR/bin $DESTDIR/sbin $DESTDIR/usr/sbin $DESTDIR/usr/lib64",
     "rm -f $DESTDIR/usr/lib/libuuid.la $DESTDIR/usr/lib/libblkid.la $DESTDIR/usr/lib/libmount.la $DESTDIR/usr/lib/libsmartcols.la",
 ]

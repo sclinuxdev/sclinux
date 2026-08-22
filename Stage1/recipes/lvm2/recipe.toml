@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "lvm2"
 version = "2.03.42"
-release = "2"
+release = "3"
 description = "Device Mapper and Logical Volume Manager userspace"
 license = "GPL-2.0-only AND LGPL-2.1-only"
 channel = "system"
@@ -43,5 +43,6 @@ build = [
 
 install = [
     "make DESTDIR=$DESTDIR install",
+    "sed -i \"s#${SC_BUILD_SYSROOT}/.stage1-tool-wrappers/usr/bin/systemd-run#/usr/bin/systemd-run#g\" $DESTDIR/usr/lib/udev/rules.d/69-dm-lvm.rules",
     "mkdir -p $DESTDIR/etc/lvm/archive $DESTDIR/etc/lvm/backup",
 ]

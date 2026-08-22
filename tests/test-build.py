@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -131,6 +132,13 @@ def main() -> int:
         True,
     )
     failed += not check(
+        "Stage0 tag binds the bootstrap Sage source",
+        build.stage0_tag("aarch64", seed).endswith(
+            build.source_for_package("sage")["sha256"][:12]
+        ),
+        True,
+    )
+    failed += not check(
         "Stage0 disables xmake network statistics",
         "XMAKE_STATS=false" in containerfile,
         True,
@@ -149,13 +157,43 @@ def main() -> int:
         (REPO / "Stage1" / "recipes" / "sage" / "recipe.toml").read_text()
     )
     failed += not check(
-        "Stage0 and Stage1 pin the merged Sage integrity release",
+        "Stage0 and Stage1 pin the tested Sage bootstrap release",
         (sage_recipe["source"]["url"], sage_recipe["source"]["sha256"]),
         (
-            "https://codeload.github.com/antinomie1/sage/tar.gz/"
-            "8629fdf9eec6a559514e7335c8a59fe27b5cfc47",
-            "99a5fbda5c7d9adac210e5f6fe27896dde3efb85ee71da9c364a40ede13c530d",
+            "https://codeload.github.com/sclinuxdev/sage/tar.gz/"
+            "f2d18f7f30f5cdc690b9ebb288858ae04f3337df",
+            "95f67392824bb00048ccb5b012e094e4861e12f43f3b8ea335a2fd5e9b3f2860",
         ),
+    )
+    sage_helper = (REPO / "Stage1" / "recipes" / "sage" / "shc").read_text()
+    failed += not check(
+        "Sage package installs the tested SCLinux shorthand wrapper",
+        sage_recipe["package"]["release"] == "13"
+        and 'install -Dm755 ../shc "$DESTDIR/usr/bin/shc"'
+        in sage_recipe["package"]["install"]
+        and sage_helper == (REPO / "scripts" / "shc").read_text(),
+        True,
+    )
+    xmake_recipe = build.tomllib.loads(
+        (REPO / "Stage1" / "recipes" / "xmake" / "recipe.toml").read_text()
+    )
+    xmake_wrapper = (
+        REPO / "Stage1" / "recipes" / "xmake" / "xmake-channel-wrapper.sh"
+    ).read_text()
+    failed += not check(
+        "xmake remains runnable through the Sage toolchain profile",
+        xmake_recipe["package"]["release"] == "5"
+        and "XMAKE_PROGRAM_FILE" in xmake_wrapper
+        and "/opt/channels/xmake/3/bin/xmake.real" in xmake_wrapper,
+        True,
+    )
+    proot_chroot = (REPO / "tools" / "proot-bin" / "chroot").read_text()
+    failed += not check(
+        "restricted builders can run target-root triggers through PRoot",
+        'target_root=$(readlink -f "$1")' in proot_chroot
+        and "PRoot 5.4.0 or newer" in proot_chroot
+        and 'exec proot -R "$target_root" "$@"' in proot_chroot,
+        True,
     )
 
     command = build.stage0_command(
@@ -193,6 +231,12 @@ def main() -> int:
         "/fixture-stage1-sysroot/.stage1-tool-wrappers/usr/bin",
     )
     failed += not check(
+        "Stage1 keeps the Stage0 compiler until target libc is complete",
+        "/fixture-stage1-sysroot/opt/channels/gcc/15/bin"
+        not in stage1_environment["PATH"].split(":"),
+        True,
+    )
+    failed += not check(
         "Stage1 links against its isolated package libraries",
         stage1_environment["LDFLAGS"].split()[0],
         "-L/fixture-stage1-sysroot/usr/lib",
@@ -201,6 +245,11 @@ def main() -> int:
         "Stage1 exposes its isolated sysroot to dependency-aware recipes",
         stage1_environment["SC_BUILD_SYSROOT"],
         "/fixture-stage1-sysroot",
+    )
+    failed += not check(
+        "Stage1 loads character converters from its isolated glibc",
+        stage1_environment["GCONV_PATH"],
+        "/fixture-stage1-sysroot/usr/lib/gconv",
     )
     failed += not check(
         "Stage1 rewrites pkg-config prefixes into its isolated sysroot",
@@ -240,6 +289,11 @@ def main() -> int:
         }.issubset(command),
         True,
     )
+    failed += not check(
+        "Stage0 image labels the bootstrap Sage source identity",
+        f"org.shenchen.stage0.sage-sha256={sage_source['sha256']}" in command,
+        True,
+    )
 
     stage1_packages = build.load_stage1_manifest()
     failed += not check(
@@ -250,6 +304,11 @@ def main() -> int:
     failed += not check(
         "Stage1 builds libunistring before the gettext tools that load it",
         stage1_packages.index("libunistring") < stage1_packages.index("gettext"),
+        True,
+    )
+    failed += not check(
+        "Stage1 builds libxcrypt before util-linux supplies sulogin",
+        stage1_packages.index("libxcrypt") < stage1_packages.index("util-linux"),
         True,
     )
     failed += not check(
@@ -365,6 +424,200 @@ def main() -> int:
             and 'HOSTCC="gcc $LDFLAGS"' in iproute2["source"]["build"][1],
             True,
         )
+        failed += not check(
+            "Stage1 usr-merge recipes install administrative tools canonically",
+            "for directory in $DESTDIR/sbin $DESTDIR/usr/sbin"
+            in build.tomllib.loads(
+                (REPO / "Stage1" / "recipes" / "glibc" / "recipe.toml").read_text()
+            )["source"]["install"][1]
+            and "s@/usr/lib/@@g"
+            in build.tomllib.loads(
+                (REPO / "Stage1" / "recipes" / "glibc" / "recipe.toml").read_text()
+            )["source"]["install"][2]
+            and "SBINDIR=/usr/bin" in iproute2["source"]["install"][0]
+            and any(
+                "rm -rf $DESTDIR/bin $DESTDIR/sbin" in command
+                for command in build.tomllib.loads(
+                    (
+                        REPO
+                        / "Stage1"
+                        / "recipes"
+                        / "util-linux-libs"
+                        / "recipe.toml"
+                    ).read_text()
+                )["source"]["install"]
+            ),
+            True,
+        )
+        util_linux_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "util-linux" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 util-linux closes the sulogin crypt dependency",
+            "libxcrypt >= 4.5.2" in util_linux_recipe["source"]["dependencies"],
+            True,
+        )
+        runtime_generated_recipes = (
+            "autoconf",
+            "automake",
+            "bash",
+            "bison",
+            "coreutils",
+            "gettext",
+            "glibc",
+            "groff",
+            "inetutils",
+            "libffi",
+            "libunistring",
+            "texinfo",
+        )
+        failed += not check(
+            "Stage1 recipes exclude generated info indexes from package payloads",
+            all(
+                "usr/share/info/dir"
+                in " ".join(
+                    build.tomllib.loads(
+                        (
+                            REPO / "Stage1" / "recipes" / package / "recipe.toml"
+                        ).read_text()
+                    )["source"]["install"]
+                )
+                for package in runtime_generated_recipes
+            ),
+            True,
+        )
+        base_files_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "base-files" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 base files support enabled systemd services and image assembly",
+            base_files_recipe["package"]["release"] == "6"
+            and "systemd-oom:x:994:994" in " ".join(base_files_recipe["package"]["install"])
+            and "systemd-oom:x:994:" in " ".join(base_files_recipe["package"]["install"])
+            and "etc/fstab" not in " ".join(base_files_recipe["package"]["install"]),
+            True,
+        )
+        gettext_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "gettext" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 gettext forces libasprintf through its working libtool fallback",
+            any(
+                "libasprintf.la CXXLINK=false" in command
+                for command in gettext_recipe["source"]["build"]
+            ),
+            True,
+        )
+        libffi_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "libffi" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 libffi installs shared libraries in the canonical usr libdir",
+            "--libdir=/usr/lib" in libffi_recipe["source"]["build"][0]
+            and "--disable-multi-os-directory"
+            in libffi_recipe["source"]["build"][0],
+            True,
+        )
+        binutils_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "binutils" / "recipe.toml").read_text()
+        )
+        binutils_install = " ".join(binutils_recipe["source"]["install"])
+        failed += not check(
+            "Stage1 binutils installs the normalized multiarch linker alias",
+            "@SC_GNU_TRIPLET@" in binutils_install
+            and "s/-pc-/-/" in binutils_install
+            and "s/-unknown-/-/" in binutils_install
+            and "ln -sf ld" in binutils_install
+            and "opt/channels/gcc/15/share/info/dir" in binutils_install,
+            True,
+        )
+        gcc_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "gcc" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 GCC disables the unused libcc1 interface",
+            "--disable-libcc1" in gcc_recipe["source"]["build"][0]
+            and "opt/channels/gcc/15/share/info/dir"
+            in " ".join(gcc_recipe["source"]["install"]),
+            True,
+        )
+        bash_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "bash" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 Bash uses procfs-backed descriptors for process substitution",
+            "bash_cv_dev_fd=standard" in bash_recipe["source"]["build"][0],
+            True,
+        )
+        glibc_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "glibc" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 glibc excludes the runtime linker cache from its payload",
+            "etc/ld.so.cache" in " ".join(glibc_recipe["source"]["install"]),
+            True,
+        )
+        mkinitcpio_recipe = build.tomllib.loads(
+            (
+                REPO / "Stage1" / "recipes" / "mkinitcpio" / "recipe.toml"
+            ).read_text()
+        )
+        linux_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "linux-zen" / "recipe.toml").read_text()
+        )
+        boot_recipe = build.tomllib.loads(
+            (
+                REPO / "Stage1" / "recipes" / "sclinux-boot" / "recipe.toml"
+            ).read_text()
+        )
+        failed += not check(
+            "Stage1 boot recipes declare executable capability hooks",
+            mkinitcpio_recipe["capability_hooks"]
+            == [
+                {
+                    "capability": "virtual/initramfs-generator",
+                    "exec": "/usr/bin/mkinitcpio",
+                    "args": ["-P"],
+                }
+            ]
+            and boot_recipe["capability_hooks"]
+            == [
+                {
+                    "capability": "virtual/bootloader",
+                    "exec": "/usr/bin/sclinux-update-boot",
+                    "args": [],
+                }
+            ]
+            and "virtual/initramfs-generator"
+            in linux_recipe["source"]["dependencies"]
+            and "mkinitcpio.d/linux-zen.preset"
+            in " ".join(linux_recipe["source"]["install"]),
+            True,
+        )
+        failed += not check(
+            "Stage1 initramfs configuration exists before the kernel trigger fires",
+            "etc/mkinitcpio.conf"
+            in " ".join(mkinitcpio_recipe["source"]["install"])
+            and "etc/mkinitcpio.conf"
+            not in " ".join(boot_recipe["package"]["install"]),
+            True,
+        )
+        failed += not check(
+            "Stage1 kernel objtool tolerates build containers without procfs",
+            "[ -f .prepared ] || patch -p1"
+            in " ".join(linux_recipe["source"]["prepare"])
+            and "objtool-no-procfs.patch"
+            in " ".join(linux_recipe["source"]["prepare"])
+            and "return stack_limit &&"
+            in (
+                REPO
+                / "Stage1"
+                / "recipes"
+                / "linux-zen"
+                / "objtool-no-procfs.patch"
+            ).read_text(),
+            True,
+        )
         kbd = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "kbd" / "recipe.toml").read_text()
         )
@@ -392,10 +645,10 @@ def main() -> int:
             "file-libs": "rm -rf $DESTDIR/usr/share",
             "openssl-libs": "usr/lib/cmake",
             "openssl": "usr/lib/ossl-modules",
-            "shadow": "usr/sbin/nologin",
+            "shadow": "usr/bin/nologin",
             "man-pages": "crypt_r.3",
-            "mkinitcpio": "etc/mkinitcpio.conf",
-            "inetutils": "man/man1/hostname.1",
+            "mkinitcpio": "HOOKS=(systemd modconf block lvm2 filesystems fsck)",
+            "inetutils": "usr/bin/hostname",
             "tcl": "Tcl_Thread.3",
         }
         failed += not check(
@@ -499,12 +752,29 @@ def main() -> int:
             (REPO / "Stage1" / "recipes" / "bison" / "recipe.toml").read_text()
         )
         failed += not check(
-            "Stage1 Bison resolves build tools through the target runtime",
+            "Stage1 Bison resolves the available architecture-matched runtime",
             bison["source"]["build"][0].startswith("M4=m4 ./configure ")
-            and "PREBISON=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            and "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
             in bison["source"]["build"][1]
-            and "PREBISON=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            and "for directory in /lib /lib64 /usr/lib /usr/lib64"
+            in bison["source"]["build"][1]
+            and "PREBISON=\"$TARGET_LOADER --library-path"
+            in bison["source"]["build"][1]
+            and "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
             in bison["source"]["install"][0],
+            True,
+        )
+        expect_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "expect" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 Expect bypasses host architecture and Tcl runtime assumptions",
+            expect_recipe["package"]["release"] == "4"
+            and "--build=@SC_GNU_TRIPLET@" in expect_recipe["source"]["build"][0]
+            and ".stage1-tool-wrappers/usr/bin/tclsh8.6"
+            in expect_recipe["source"]["install"][0]
+            and "env -u LD_LIBRARY_PATH" in expect_recipe["source"]["install"][0]
+            and "usr/lib/tcl8.6" in expect_recipe["source"]["install"][0],
             True,
         )
         coreutils = build.tomllib.loads(
@@ -514,9 +784,13 @@ def main() -> int:
             "Stage1 coreutils hashes do not retain the seed OpenSSL ABI",
             "--without-openssl" in coreutils["source"]["build"][0]
             and "$ENV{SC_TARGET_RUNNER}" in coreutils["source"]["prepare"][0]
-            and "SC_TARGET_RUNNER=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            and "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
             in coreutils["source"]["build"][1]
-            and "SC_TARGET_RUNNER=\"$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
+            and "for directory in /lib /lib64 /usr/lib /usr/lib64"
+            in coreutils["source"]["build"][1]
+            and "SC_TARGET_RUNNER=\"$TARGET_LOADER --library-path"
+            in coreutils["source"]["build"][1]
+            and "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@"
             in coreutils["source"]["install"][0]
             and "cu_install_program=install"
             in coreutils["source"]["install"][0],
@@ -543,7 +817,10 @@ def main() -> int:
             and "conf_data.set('UDEVD_PATH', '/usr/lib/systemd/systemd-udevd')"
             in mkinitcpio_paths
             and "conf_data.set('TMPFILES_PATH', '/usr/bin/systemd-tmpfiles')"
-            in mkinitcpio_paths,
+            in mkinitcpio_paths
+            and '[[ -e "$nvpcr" ]] || continue' in mkinitcpio_paths
+            and "add_binary sh" in mkinitcpio_paths
+            and "LC_ALL=C.UTF-8/LC_ALL=C" in mkinitcpio["source"]["install"][1],
             True,
         )
         mkinitcpio_lvm = (
@@ -568,6 +845,15 @@ def main() -> int:
                 f"--with-{kind}-{tool}=" in lvm2["source"]["build"][0]
                 for kind in ("thin", "cache")
                 for tool in ("check", "dump", "repair", "restore")
+            ),
+            True,
+        )
+        failed += not check(
+            "Stage1 LVM udev rules use the target systemd-run path",
+            any(
+                ".stage1-tool-wrappers/usr/bin/systemd-run#/usr/bin/systemd-run"
+                in command
+                for command in lvm2["source"]["install"]
             ),
             True,
         )
@@ -621,8 +907,18 @@ def main() -> int:
             (REPO / "Stage1" / "recipes" / "cmake" / "recipe.toml").read_text()
         )
         failed += not check(
-            "Stage1 CMake runs its temporary bootstrap binary with the target loader",
+            "Stage1 CMake runs bootstrap probes and its temporary binary with the target loader",
             "run-bootstrap-cmake.sh @SC_DYNAMIC_LINKER@"
+            in cmake["source"]["prepare"][2]
+            and "./${TMPFILE}"
+            in cmake["source"]["prepare"][1]
+            and "./test"
+            in cmake["source"]["prepare"][1]
+            and "--direct @SC_DYNAMIC_LINKER@"
+            in cmake["source"]["prepare"][1]
+            and "../../run-bootstrap-cmake.sh"
+            in cmake["source"]["prepare"][1]
+            and "../../../run-bootstrap-cmake.sh"
             in cmake["source"]["prepare"][1]
             and "--library-path"
             in (
@@ -636,6 +932,14 @@ def main() -> int:
             in cmake["source"]["install"][0],
             True,
         )
+        failed += not check(
+            "Stage1 CMake leaves libc headers after the C++ include_next chain",
+            all(
+                "env -u CPATH" in command
+                for command in cmake["source"]["build"] + cmake["source"]["install"]
+            ),
+            True,
+        )
         linux_zen = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "linux-zen" / "recipe.toml").read_text()
         )
@@ -646,10 +950,13 @@ def main() -> int:
             "Stage1 kernel host tools run with their target runtime closure",
             "make-stage1-kernel.sh @SC_DYNAMIC_LINKER@"
             in linux_zen["source"]["build"][0]
-            and "$(SC_TARGET_RUNNER) $(objtool)"
-            in linux_zen["source"]["prepare"][2]
+            and any(
+                "$(SC_TARGET_RUNNER) $(objtool)" in command
+                for command in linux_zen["source"]["prepare"]
+            )
             and "--dynamic-linker,$loader" in kernel_runner
             and "--disable-new-dtags,-rpath,$library_path" in kernel_runner
+            and "unset CPATH" in kernel_runner
             and 'SC_TARGET_RUNNER="$target_runner"' in kernel_runner,
             True,
         )
@@ -821,6 +1128,39 @@ def main() -> int:
             digest + "\n",
         )
 
+        replace_recipe = Path(directory) / "replace" / "recipe.toml"
+        replace_recipe.parent.mkdir()
+        replace_recipe.write_text(
+            "[package]\n"
+            'name = "replace"\n'
+            'version = "1.0"\n'
+            'arch = "aarch64"\n\n'
+            'install = ["true"]\n'
+        )
+        replace_artifact = replace_recipe.parent / "replace-1.0-1-aarch64.pkg.tar.zst"
+        replace_artifact.write_bytes(payload)
+        replace_sysroot = Path(directory) / "replace-sysroot"
+        replace_sysroot.mkdir()
+        (replace_sysroot / "bin").symlink_to("usr/bin")
+        with mock.patch.object(build.subprocess, "run") as mocked_run:
+            build.stage_stage1_package(
+                {
+                    "name": "base-files",
+                    "sha256": digest,
+                    "artifact": replace_artifact.name,
+                },
+                replace_recipe,
+                replace_sysroot,
+                {},
+            )
+        failed += not check(
+            "Stage1 base-files refreshes usr-merge aliases already present in its build sysroot",
+            not (replace_sysroot / "bin").exists()
+            and not (replace_sysroot / "bin").is_symlink()
+            and "--overwrite" in mocked_run.call_args.args[0],
+            True,
+        )
+
         sysroot_library = Path(directory) / "build-sysroot" / "usr/lib"
         sysroot_library.mkdir(parents=True)
         (sysroot_library / "legacy.la").write_text("libdir='/usr/lib'\n")
@@ -846,6 +1186,60 @@ def main() -> int:
             "Stage1 accepts the native root without disabling workspace leak checks",
             native_validation_error,
             "",
+        )
+
+        legacy_layout_recipe = Path(directory) / "legacy-layout-recipe"
+        (legacy_layout_recipe / "pkg/usr/sbin").mkdir(parents=True)
+        try:
+            build.validate_stage1_usr_merge_layout(legacy_layout_recipe, "fixture")
+        except build.ConfigError as exc:
+            legacy_layout_error = str(exc)
+        else:
+            legacy_layout_error = "no error"
+        failed += not check(
+            "Stage1 rejects package payloads below usr-merge aliases",
+            "non-canonical usr-merge path: usr/sbin" in legacy_layout_error,
+            True,
+        )
+
+        generated_file_recipe = Path(directory) / "generated-file-recipe"
+        generated_cache = generated_file_recipe / "pkg/etc/ld.so.cache"
+        generated_cache.parent.mkdir(parents=True)
+        generated_cache.write_bytes(b"cache")
+        try:
+            build.validate_stage1_runtime_generated_files(
+                generated_file_recipe, "fixture"
+            )
+        except build.ConfigError as exc:
+            generated_file_error = str(exc)
+        else:
+            generated_file_error = "no error"
+        failed += not check(
+            "Stage1 rejects runtime-generated files in package payloads",
+            "runtime-generated file: etc/ld.so.cache" in generated_file_error,
+            True,
+        )
+
+        generated_info_recipe = Path(directory) / "generated-info-recipe"
+        generated_info = (
+            generated_info_recipe
+            / "pkg/opt/channels/gcc/15/share/info/dir"
+        )
+        generated_info.parent.mkdir(parents=True)
+        generated_info.write_text("generated index\n")
+        try:
+            build.validate_stage1_runtime_generated_files(
+                generated_info_recipe, "fixture"
+            )
+        except build.ConfigError as exc:
+            generated_info_error = str(exc)
+        else:
+            generated_info_error = "no error"
+        failed += not check(
+            "Stage1 rejects generated info indexes below toolchain channels",
+            "runtime-generated file: opt/channels/gcc/15/share/info/dir"
+            in generated_info_error,
+            True,
         )
 
         sysroot_binary = sysroot_library.parent / "bin/pkgconf"
@@ -877,10 +1271,13 @@ def main() -> int:
         gcc_plugin = gcc_cc1.parent / "liblto_plugin.so"
         gcc_plugin.write_bytes(b"\x7fELFfixture")
         gcc_plugin.chmod(0o755)
-        xmake_binary = (
+        xmake_launcher = (
             sysroot_library.parents[1] / "opt/channels/xmake/3/bin/xmake"
         )
-        xmake_binary.parent.mkdir(parents=True)
+        xmake_launcher.parent.mkdir(parents=True)
+        xmake_launcher.write_text("#!/bin/sh\nexec /opt/channels/xmake/3/bin/xmake.real \"$@\"\n")
+        xmake_launcher.chmod(0o755)
+        xmake_binary = xmake_launcher.with_name("xmake.real")
         xmake_binary.write_bytes(b"\x7fELFfixture")
         xmake_binary.chmod(0o755)
         perl_root = sysroot_library / "perl5/5.44/core_perl"
@@ -899,13 +1296,21 @@ def main() -> int:
             ["cmake", "gmake", "make", "perl", "pkg-config", "pkgconf"],
         )
         failed += not check(
+            "Stage1 defers its GCC wrappers until target libc is complete",
+            not (tool_wrapper_root / "gcc-bin").exists()
+            and not (tool_wrapper_root / "gcc-libexec").exists(),
+            True,
+        )
+        failed += not check(
             "Stage1 keeps gmake on the same target runtime as make",
             (wrapper_root / "gmake").resolve(),
             (wrapper_root / "make").resolve(),
         )
         failed += not check(
             "Stage1 exposes the locked xmake channel through a target wrapper",
-            (tool_wrapper_root / "xmake-bin/xmake").is_file(),
+            (tool_wrapper_root / "xmake-bin/xmake").is_symlink()
+            and (tool_wrapper_root / "xmake-bin/xmake").resolve()
+            == (tool_wrapper_root / "xmake-bin/xmake.real").resolve(),
             True,
         )
         xmake_wrapper = (tool_wrapper_root / "xmake-bin/xmake").read_text()
@@ -921,23 +1326,6 @@ def main() -> int:
             '--argv0 "$0"' in (wrapper_root / "cmake").read_text()
             and (tool_wrapper_root / "usr/share/cmake-3.31").resolve()
             == cmake_modules.resolve(),
-            True,
-        )
-        failed += not check(
-            "Stage1 GCC wrapper runs compiler subprograms through the target loader",
-            f"-B{tool_wrapper_root / 'gcc-libexec'}/"
-            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
-            and f"--sysroot={sysroot_library.parents[1].resolve()}"
-            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
-            and f"-Wl,-rpath-link,{sysroot_library.resolve()}"
-            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
-            and "-fuse-ld=lld"
-            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
-            and (tool_wrapper_root / "gcc-libexec/cc1").is_file()
-            and (tool_wrapper_root / "gcc-libexec/liblto_plugin.so").resolve()
-            == gcc_plugin.resolve()
-            and (tool_wrapper_root / "gcc-bin/ld.lld").resolve()
-            == (tool_wrapper_root / "gcc-bin/ld").resolve(),
             True,
         )
         wrapper = (wrapper_root / "pkgconf").read_text()
@@ -962,8 +1350,28 @@ def main() -> int:
         target_loader = sysroot_library / "ld-linux-aarch64.so.1"
         target_loader.write_bytes(b"\x7fELFfixture")
         (sysroot_library / "libc.so.6").write_bytes(b"\x7fELFfixture")
+        target_stdio = sysroot_library.parent / "include/stdio.h"
+        target_stdio.parent.mkdir(parents=True)
+        target_stdio.write_text("/* fixture */\n")
         build.refresh_stage1_tool_wrappers(
             sysroot_library.parents[1], build.resolve_architecture("aarch64")
+        )
+        failed += not check(
+            "Stage1 GCC wrapper runs compiler subprograms through the target loader",
+            f"-B{tool_wrapper_root / 'gcc-libexec'}/"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and f"--sysroot={sysroot_library.parents[1].resolve()}"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and f"-Wl,-rpath-link,{sysroot_library.resolve()}"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and "-fuse-ld=lld"
+            in (tool_wrapper_root / "gcc-bin/gcc").read_text()
+            and (tool_wrapper_root / "gcc-libexec/cc1").is_file()
+            and (tool_wrapper_root / "gcc-libexec/liblto_plugin.so").resolve()
+            == gcc_plugin.resolve()
+            and (tool_wrapper_root / "gcc-bin/ld.lld").resolve()
+            == (tool_wrapper_root / "gcc-bin/ld").resolve(),
+            True,
         )
         failed += not check(
             "Stage1 switches to its own dynamic loader after glibc is staged",
@@ -1115,8 +1523,6 @@ def main() -> int:
             and "BOOTAA64.EFI" in boot_text
             and "ttyAMA0,115200" in boot_text
             and "root=/dev/mapper/vg0-root rd.lvm.lv=vg0/root" in boot_text
-            and "HOOKS=(systemd modconf block lvm2 filesystems fsck)" in boot_text
-            and "autodetect" not in boot_text
             and "SCLINUX_ESP:-/boot/efi" in boot_helper
             and "SCLINUX_ESP:-/boot/efi" in kernel_install,
             True,

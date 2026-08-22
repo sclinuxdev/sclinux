@@ -190,6 +190,11 @@ batch = "R"
 action = "build"
 
 [[packages]]
+name = "libxcrypt"
+batch = "D"
+action = "build"
+
+[[packages]]
 name = "util-linux"
 batch = "R"
 action = "build"
@@ -456,11 +461,6 @@ name = "libelf"
 batch = "D"
 action = "build"
 note = "elfutils 只取 libelf"
-
-[[packages]]
-name = "libxcrypt"
-batch = "D"
-action = "build"
 
 [[packages]]
 name = "groff"

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "e2fsprogs"
 version = "1.47.4"
-release = "2"
+release = "3"
 description = "Ext2/3/4 filesystem utilities (mkfs, fsck, tune2fs, debugfs, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -28,7 +28,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --sysconfdir=/etc --enable-elf-shlibs --disable-libblkid --disable-libuuid --disable-uuidd --disable-fsck",
+    "./configure --prefix=/usr --sbindir=/usr/bin --sysconfdir=/etc --with-udev-rules-dir=/usr/lib/udev/rules.d --with-systemd-unit-dir=/usr/lib/systemd/system --enable-elf-shlibs --disable-libblkid --disable-libuuid --disable-uuidd --disable-fsck",
     "make -j$(nproc)",
 ]
 

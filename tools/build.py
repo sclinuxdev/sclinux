@@ -163,7 +163,11 @@ def shell_environment(architecture: dict[str, str]) -> str:
 
 
 def stage0_tag(name: str, seed: dict) -> str:
-    return f"shenchen-stage0:{name}-{seed['index_digest'][7:19]}"
+    sage_sha256 = source_for_package("sage")["sha256"]
+    return (
+        f"shenchen-stage0:{name}-{seed['index_digest'][7:19]}-"
+        f"{sage_sha256[:12]}"
+    )
 
 
 def render_stage1_recipe(recipe: str, architecture: dict[str, str], output: Path) -> Path:
@@ -550,6 +554,20 @@ def stage1_perl_module_paths(sysroot: Path) -> list[Path]:
     ]
 
 
+def stage1_target_libc_ready(sysroot: Path) -> bool:
+    if not (sysroot / "usr/include/stdio.h").is_file():
+        return False
+    has_libc = any(
+        (sysroot / directory / "libc.so.6").is_file()
+        for directory in ("usr/lib", "usr/lib64", "lib", "lib64")
+    )
+    has_loader = any(
+        any((sysroot / directory).glob("ld-linux*.so*"))
+        for directory in ("usr/lib", "usr/lib64", "lib", "lib64")
+    )
+    return has_libc and has_loader
+
+
 def stage1_build_environment(
     seed: dict | None = None, sysroot: Path | None = None
 ) -> dict[str, str]:
@@ -569,24 +587,31 @@ def stage1_build_environment(
         usr = sysroot / "usr"
         wrappers = sysroot / ".stage1-tool-wrappers"
         environment["SC_BUILD_SYSROOT"] = str(sysroot.resolve())
+        environment["GCONV_PATH"] = str(usr / "lib/gconv")
         libraries = [str(usr / "lib"), str(sysroot / "lib")]
         includes = [str(usr / "include")]
-        prepend_environment(
-            environment,
-            "PATH",
+        tool_paths = [
+            str(wrappers / "usr/bin"),
+            str(wrappers / "usr/sbin"),
+            str(wrappers / "xmake-bin"),
+            str(usr / "bin"),
+            str(usr / "sbin"),
+        ]
+        if stage1_target_libc_ready(sysroot):
+            tool_paths.extend(
+                [
+                    str(wrappers / "gcc-bin"),
+                    str(sysroot / "opt/channels/gcc/15/bin"),
+                ]
+            )
+        tool_paths.extend(
             [
-                str(wrappers / "usr/bin"),
-                str(wrappers / "gcc-bin"),
-                str(wrappers / "usr/sbin"),
-                str(wrappers / "xmake-bin"),
-                str(usr / "bin"),
-                str(usr / "sbin"),
-                str(sysroot / "opt/channels/gcc/15/bin"),
                 str(sysroot / "opt/channels/xmake/3/bin"),
                 str(sysroot / "bin"),
                 str(sysroot / "sbin"),
-            ],
+            ]
         )
+        prepend_environment(environment, "PATH", tool_paths)
         prepend_environment(environment, "LIBRARY_PATH", libraries)
         prepend_environment(environment, "CPATH", includes)
         prepend_environment(
@@ -685,11 +710,25 @@ def stage_stage1_package(
         for phase in ("prepare", "build", "install")
     )
     if has_payload:
+        if entry["name"] == "base-files":
+            for relative in (
+                "bin",
+                "sbin",
+                "lib",
+                "lib64",
+                "usr/sbin",
+                "usr/lib64",
+                "var/run",
+            ):
+                alias = sysroot / relative
+                if alias.is_symlink():
+                    alias.unlink()
         subprocess.run(
             [
                 "tar",
                 "--zstd",
                 "--extract",
+                "--overwrite",
                 "--file",
                 str(artifact),
                 "--directory",
@@ -745,6 +784,30 @@ def validate_stage1_package_shebangs(recipe_dir: Path, forbidden_roots: list[Pat
             raise ConfigError(f"Stage1 package shebang contains a build path: {path}")
 
 
+def validate_stage1_usr_merge_layout(recipe_dir: Path, package: str) -> None:
+    if package == "base-files":
+        return
+    package_root = recipe_dir / "pkg"
+    for relative in ("bin", "sbin", "lib", "lib64", "usr/sbin", "usr/lib64"):
+        path = package_root / relative
+        if path.exists() or path.is_symlink():
+            raise ConfigError(
+                f"Stage1 package {package} contains non-canonical usr-merge path: {relative}"
+            )
+
+
+def validate_stage1_runtime_generated_files(recipe_dir: Path, package: str) -> None:
+    package_root = recipe_dir / "pkg"
+    generated_paths = [package_root / "etc/ld.so.cache"]
+    generated_paths.extend(package_root.glob("**/share/info/dir"))
+    for path in generated_paths:
+        if path.exists() or path.is_symlink():
+            relative = path.relative_to(package_root)
+            raise ConfigError(
+                f"Stage1 package {package} contains runtime-generated file: {relative}"
+            )
+
+
 def stage1_dynamic_loader(
     architecture: dict[str, str], sysroot: Path | None = None
 ) -> str:
@@ -765,15 +828,16 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     wrapper_sources = [
         ("usr/bin", "usr/bin"),
         ("usr/sbin", "usr/sbin"),
-        ("opt/channels/gcc/15/bin", "gcc-bin"),
         ("opt/channels/xmake/3/bin", "xmake-bin"),
     ]
-    gcc_libexec = sysroot / "opt/channels/gcc/15/libexec/gcc"
-    wrapper_sources.extend(
-        (str(path.relative_to(sysroot)), "gcc-libexec")
-        for path in sorted(gcc_libexec.glob("*/*"))
-        if path.is_dir()
-    )
+    if stage1_target_libc_ready(sysroot):
+        wrapper_sources.append(("opt/channels/gcc/15/bin", "gcc-bin"))
+        gcc_libexec = sysroot / "opt/channels/gcc/15/libexec/gcc"
+        wrapper_sources.extend(
+            (str(path.relative_to(sysroot)), "gcc-libexec")
+            for path in sorted(gcc_libexec.glob("*/*"))
+            if path.is_dir()
+        )
     for relative, wrapper_name in wrapper_sources:
         source = sysroot / relative
         if not source.is_dir():
@@ -839,6 +903,10 @@ def refresh_stage1_tool_wrappers(sysroot: Path, architecture: dict[str, str]) ->
     gcc_ld = wrapper_root / "gcc-bin/ld"
     if gcc_ld.is_file():
         (gcc_ld.parent / "ld.lld").symlink_to(gcc_ld.name)
+    xmake_real = wrapper_root / "xmake-bin/xmake.real"
+    xmake_command = wrapper_root / "xmake-bin/xmake"
+    if xmake_real.is_file() and not xmake_command.exists():
+        xmake_command.symlink_to(xmake_real.name)
     make = wrapper_root / "usr/bin/make"
     gmake = wrapper_root / "usr/bin/gmake"
     if make.is_file() and not gmake.exists():
@@ -917,6 +985,8 @@ def run_stage1_packages(
             raise ConfigError(f"Stage1 package build failed: {name}: {exc}") from exc
         validate_stage1_package_paths(recipe_path.parent, [workspace, sysroot])
         validate_stage1_package_shebangs(recipe_path.parent, [workspace, sysroot])
+        validate_stage1_usr_merge_layout(recipe_path.parent, name)
+        validate_stage1_runtime_generated_files(recipe_path.parent, name)
         entry = stage1_package_entry(name, recipe_path, architecture)
         if entry is None:
             raise ConfigError(f"Stage1 package artifact is missing after build: {name}")
@@ -963,6 +1033,8 @@ def stage0_command(name: str, architecture: dict[str, str], seed: dict, tag: str
         f"org.shenchen.stage0.index-digest={seed['index_digest']}",
         "--label",
         f"org.shenchen.stage0.manifest-digest={manifest_digest}",
+        "--label",
+        f"org.shenchen.stage0.sage-sha256={sage['sha256']}",
         "--build-arg",
         f"SEED_IMAGE={image}",
         "--build-arg",

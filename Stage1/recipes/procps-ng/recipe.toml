@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "procps-ng"
 version = "4.0.7"
-release = "1"
+release = "2"
 description = "Process and system monitoring utilities (ps, top, free, pidof, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -29,7 +29,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --docdir=/usr/share/doc/procps-ng-4.0.7 --disable-static --disable-kill --enable-watch8bit",
+    "./configure --prefix=/usr --sbindir=/usr/bin --docdir=/usr/share/doc/procps-ng-4.0.7 --disable-static --disable-kill --enable-watch8bit",
     "make -j$(nproc)",
 ]
 

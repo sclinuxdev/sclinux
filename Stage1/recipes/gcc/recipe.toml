@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "gcc"
 version = "15.3.0"
-release = "3"
+release = "5"
 description = "The GNU Compiler Collection (C, C++)"
 license = "GPL-3.0-or-later"
 channel = "toolchain/gcc:15"
@@ -31,7 +31,7 @@ prepare = [
 ]
 
 build = [
-    "cd build && ../configure --prefix=/opt/channels/gcc/15 --enable-languages=c,c++ --enable-default-pie --enable-default-ssp --disable-multilib --disable-bootstrap --disable-fixincludes --with-system-zlib",
+    "cd build && ../configure --prefix=/opt/channels/gcc/15 --enable-languages=c,c++ --enable-default-pie --enable-default-ssp --disable-multilib --disable-bootstrap --disable-fixincludes --disable-libcc1 --with-system-zlib",
     "cd build && make -j$(nproc)",
 ]
 
@@ -40,4 +40,5 @@ install = [
     "ln -sf gcc $DESTDIR/opt/channels/gcc/15/bin/cc",
     "mkdir -p $DESTDIR/opt/channels/gcc/15/share/gdb/auto-load/usr/lib",
     "mv -v $DESTDIR/opt/channels/gcc/15/lib/*gdb.py $DESTDIR/opt/channels/gcc/15/share/gdb/auto-load/usr/lib 2>/dev/null || true",
+    "rm -f $DESTDIR/opt/channels/gcc/15/share/info/dir",
 ]

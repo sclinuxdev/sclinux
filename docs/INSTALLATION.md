@@ -2,13 +2,12 @@
 
 **Spec Version:** 1.0  
 **Status:** Draft  
-**Target Firmware:** UEFI x86_64  
+**Target Firmware:** UEFI x86_64 / AArch64
 **Root Filesystem:** XFS on LVM thin  
 **Bootloader:** systemd-boot (推荐) / GRUB (备选)
 
 > [!IMPORTANT]
-> **当前可执行范围**：本文第 3–6 章（分区、LVM、文件系统、引导器）使用的全部是标准 Linux 工具，**今天即可完整执行**。
-> 第 7 章起的系统 bootstrap 依赖 `sage` 的软件仓库与 `base` 包集，**二者尚未建立**，该部分目前是目标设计而非可跟做步骤。详见 [§9 当前阻塞项](#9-当前阻塞项)。
+> **当前可执行范围**：Stage1 已生成同一清单下的 x86_64 与 aarch64 软件仓库，`base` 闭包包含 120 个包，并由 Sage 自动执行 `ldconfig`、initramfs 与引导器触发器。`tools/assemble-image-libguestfs.sh` 可把 rootfs 归档组装为本文定义的 qcow2 布局。
 
 ---
 
@@ -22,7 +21,7 @@
 6. [文件系统创建与挂载](#6-文件系统创建与挂载)
 7. [系统 bootstrap](#7-系统-bootstrap)
 8. [快照与回滚流程](#8-快照与回滚流程)
-9. [当前阻塞项](#9-当前阻塞项)
+9. [构建环境要求](#9-构建环境要求)
 10. [已知限制](#10-已知限制)
 
 ---
@@ -124,7 +123,7 @@ bootctl --esp-path=/mnt/boot/efi install
 
 代价是内核必须置于 ESP（已在 §3 布局中预留空间），以及 ESP 内容需与内核包保持同步。
 
-> ⚠️ **该同步目前没有自动机制。** `sage` 的触发器引擎不含引导器与 initramfs 钩子，内核更新后必须手工重新执行 §7.1 的两步，否则系统将无法启动。
+> 内核包声明 initramfs 与 bootloader capability hooks。Sage 在包提交后运行触发器，并在整组安装完成后执行一次聚合触发；任何触发器失败都会使安装命令返回失败。
 
 ### 4.3 备选：GRUB
 
@@ -221,14 +220,14 @@ XFS 支持 `FITRIM`，且 thin pool 的 `discards` 默认为 `passdown`，因此
 
 ## 7. 系统 bootstrap
 
-> [!WARNING]
-> 本章依赖尚不存在的软件仓库与 `base` 包集，见 [§9](#9-当前阻塞项)。以下为目标流程。
+> [!NOTE]
+> 以下命令假定 `/etc/sage/channels.toml` 已指向由 `sage repo index` 生成的架构匹配仓库。
 
 安装器的核心是 `sage` 已经实现的 `--root` sysroot 隔离能力——整个 bootstrap 本质上是围绕它的一层脚本，而非独立的安装程序。
 
 ```bash
 # 将底座包集安装进 /mnt
-sage --root /mnt install base linux glibc systemd
+sage --root /mnt install base
 
 # 写入声明式系统状态
 install -Dm644 /dev/stdin /mnt/etc/sage/system.toml <<'TOML'
@@ -250,17 +249,11 @@ TOML
 genfstab -U /mnt >> /mnt/etc/fstab
 ```
 
-**到这里文件树是完整的，但系统还不能启动。** 必须继续执行 §7.1。
+安装完成时 Sage 已执行 §7.1 所列的三个触发器。任一触发器失败时，不应组装或启动该 rootfs。
 
-### 7.1 必须手工执行的收尾步骤
+### 7.1 自动触发器与手工恢复
 
-> [!CAUTION]
-> **`sage` 不会替你做这两步。** 它的触发器引擎只覆盖 `ldconfig`、证书与 MIME 三项，**既没有 initramfs 触发器，也没有引导器触发器**。
-> 跳过本节的直接后果是：安装全程无任何报错，重启后 **kernel panic，找不到根设备**。
-
-这不是 `sage` 的缺陷——Arch 要手工 `mkinitcpio -P`，Debian 要手工配置，**所有发行版的装机流程都显式做这两步**。只是不能指望包管理器代劳。
-
-两步都必须 **chroot 进目标系统执行**，原因与 §7 同理：在宿主机上跑，更新的是宿主机。
+正常安装会依次运行 `ldconfig`、`mkinitcpio -P` 与 `sclinux-update-boot`。下列步骤只用于修复中断的构建环境，三条命令都必须在目标系统中运行。
 
 ```bash
 # 挂载 chroot 所需的伪文件系统
@@ -271,7 +264,7 @@ mount --bind /sys  /mnt/sys
 chroot /mnt /bin/bash
 ```
 
-**第一步：生成 initramfs。**
+**第一步：刷新动态链接器缓存并生成 initramfs。**
 
 根文件系统位于 thin LV 之上，initramfs **必须包含 LVM 用户空间工具与 device-mapper 模块**，否则内核起来后无法激活卷组，也就找不到 `/`。这是本布局相对普通分区方案唯一增加的 bootstrap 要求。
 
@@ -281,16 +274,17 @@ chroot /mnt /bin/bash
 # /etc/mkinitcpio.conf
 HOOKS=(base udev autodetect modconf block lvm2 filesystems keyboard fsck)
 
+ldconfig
 mkinitcpio -P
 ```
 
 **第二步：安装引导器并写入引导项。**
 
 ```bash
-bootctl install
+sclinux-update-boot
 ```
 
-内核与 initramfs 需位于 ESP（§4.2 已为此预留 1 GiB）。后续内核更新同样需要重新执行这两步——在 `triggers.toml` 落地前，这需要外部机制保证，否则更新内核后系统将无法启动。
+内核与 initramfs 位于 ESP（§4.2 已为此预留 1 GiB）。更新脚本同时写入架构对应的 `BOOTX64.EFI` 或 `BOOTAA64.EFI` 与 loader entry。
 
 ---
 
@@ -326,19 +320,16 @@ lvremove vg0/root-pre-rebuild
 
 ---
 
-## 9. 当前阻塞项
+## 9. 构建环境要求
 
-本文第 7 章无法执行，缺口如下：
-
-| 缺口 | 说明 |
+| 工具 | 用途 |
 | :--- | :--- |
-| **软件仓库** | 无任何已发布的 `*.pkg.tar.zst` 与 `index.toml`。`sage repo index` 可生成索引，但没有包可索引 |
-| **`base` 包集** | 「底座包集包含哪些包」尚未定义 |
-| **内核包** | 无 `linux` 包，也无内核构建配置 |
-| **triggers 联动** | ESP 内的内核与 initramfs 需随包更新同步，依赖 `triggers.toml` 机制落地 |
-| **`genfstab`** | 该工具来自 arch-install-scripts，需自备等价实现或引入 |
+| **libguestfs / guestfish** | 无特权创建 GPT、ESP、LVM thin 与 XFS 文件系统并导入 rootfs |
+| **qemu-img** | 创建和校验 qcow2 |
+| **QEMU + UEFI firmware** | 分别使用 q35/OVMF 与 virt/AAVMF 执行启动门禁 |
+| **PRoot 5.4.0+** | 仅用于没有 mount/chroot 权限的构建主机；5.4.0 首次支持目标 glibc 使用的 `faccessat2` |
 
-在此之前，本文第 3–6 章可用于准备一块符合规范的磁盘，第 7 章之后需手工完成或等待上述组件。
+`tools/assemble-image-libguestfs.sh ROOTFS.tar.zst OUTPUT.qcow2` 会生成 fstab 并拒绝覆盖已有镜像。产物仍须通过 `qemu-img check` 与 `tests/qemu-login-smoke.exp`，不能只以组装脚本退出码作为启动证明。
 
 ---
 

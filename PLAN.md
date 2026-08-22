@@ -213,11 +213,11 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 | A：构建契约与输入 | 已完成 |
 | B：Stage0 与统一入口 | 已完成 |
 | C：配方双架构参数化 | 已完成 |
-| D：可启动系统包集 | 进行中（x86_64 Stage1 已完成 120/120，Sage PR #8 最终基线已接入；待全新 v6 rootfs 安装及真实 initramfs 检查） |
-| E：rootfs/qcow2 组装 | 未开始 |
-| F：x86_64 验证 | 未开始 |
-| G：aarch64 验证 | 未开始 |
-| H：文档、CI 与交付 | 未开始 |
+| D：可启动系统包集 | 已完成（双架构 120/120；Sage 与 SHC 已进入 base 闭包） |
+| E：rootfs/qcow2 组装 | 进行中（双架构 rootfs 与 x86_64 最终 qcow2 已完成；aarch64 qcow2 待导出后组装） |
+| F：x86_64 验证 | 已完成（干净基镜像通过 qemu-img，临时 overlay 经 OVMF/TCG 启动；120 包与 49,028 个登记文件全部匹配，failed unit 为零） |
+| G：aarch64 验证 | 进行中（120 包 rootfs 与 43,648 个登记文件曾通过；本机磁盘写满后须重新校验，再组装 qcow2 并经 AAVMF/QEMU 验证） |
+| H：文档、CI 与交付 | 进行中 |
 
 每完成一个阶段，应在本表更新状态，并保留对应提交和可复查的测试结果。
 
@@ -227,6 +227,14 @@ QEMU 目标：`q35`、UEFI、virtio 磁盘，并额外覆盖 UTM 当前使用的
 
 | 问题 | 影响与根因 | 处理与验证 | 状态 / 上游 |
 | --- | --- | --- | --- |
+| Sage 的 usr-merge、触发器与包身份修复需要跟随 PR #8 后继续收口 | 旧基线仍可能在 upgrade、触发失败或路径别名场景产生状态偏差 | 固定并重建 Sage PR #14 提交，Stage1 GCC 15.3 集成测试 15/15、GitHub Actions 通过；SCLinux 双架构 Sage 包升级到 release 13 | 已修复；[Sage PR #14](https://github.com/sclinuxdev/sage/pull/14) |
+| 受限 x86_64 构建机自带 PRoot 5.1.0，目标 glibc 的 `faccessat2` 路径检查不受支持 | 内核文件真实存在且 `stat` 可见，但 mkinitcpio 的 Bash `-r` 判断错误，导致 initramfs trigger 失败 | 固定使用 PRoot 5.4.0（首次加入 `faccessat2`），包装器规范化 rootfs 绝对路径；从空 rootfs 重装 120 包及三项触发器一次成功 | 已修复；构建环境要求已写入安装文档 |
+| xmake 的真实二进制安装为 `xmake.real`，Stage1 wrapper 刷新后缺少 `xmake` 入口 | 构建完成的 channel 无法经 Sage profile 调用 xmake | wrapper 目录在存在 `xmake.real` 时创建同目录 `xmake` 链接；fixture 与真实 x86_64 toolchain 均通过 | 已修复；属于本仓库工具隔离问题 |
+| QEMU smoke test 在终端回显的命令文本里提前匹配 `SCLINUX_GATE_PASS` | 来宾命令尚未执行就可能被误报为通过，无法证明 Sage、SHC 或 failed-unit 门禁 | 登录后先关闭 TTY echo，再发送 gate；只有来宾实际输出 PASS 才关机，失败则打印 unit 诊断并返回非零 | 已修复；真实门禁已揭示并阻止 oomd 问题 |
+| systemd-oomd 默认启用但 base-files 缺少 `systemd-oom` 用户和组 | QEMU 启动到 multi-user 后 unit 以 `217/USER` 反复失败 | base-files release 6 固定 UID/GID 994；x86_64 最终 overlay 启动后 Sage verify 49,028/49,028，failed unit 为零 | 已修复；aarch64 将由同一 base-files 包复验 |
+| macOS 数据卷写满导致 Docker 在 ARM rootfs 导出时退出 | 首次远端流式导出只得到 559 MiB `.part`；第二次本地归档触发 Docker VM ext4 `potential data loss`，不得沿用此前 ARM 卷校验结论 | 两次失败归档均与成品隔离并删除本地残片；恢复 Docker 后必须从卷内重跑包数、Sage verify、ELF 架构与引导文件门禁，随后直接流式传输并在远端执行 zstd 与 SHA-256 校验 | 环境阻塞；等待本机释放足够空间后复验 |
+| systemd 首次启动时 IMDS generator 早于 hardware database 重建 | 串口日志出现一次缺少 hwdb 的 generator 警告，但 hardware database 随后成功生成 | 启动门禁检查 `systemctl --failed` 为空，且登录、包校验与正常关机均通过 | 已记录为首次启动日志噪声，不影响交付门禁 |
+| libguestfs appliance 未包含主机后装的 `thin_check` | 组装时 LVM 跳过 appliance 内部 thin metadata 预检并打印警告 | 最终镜像仍通过 `qemu-img check`，并在真实来宾内激活 thin pool、挂载 XFS、完成启动与关机 | 已用独立结构检查和运行门禁覆盖 |
 | 本机缺少可用 Docker daemon，磁盘余量也不足以同时保留双架构全量构建 | 无法在 macOS 本机高效完成 x86_64 Stage1；x86_64 还会退化到 TCG | 使用独立 x86_64 Linux 构建机完成原生全量构建，本机只跑快速静态测试 | 已规避；最终验收仍需回到统一入口重放 |
 | 国内环境访问部分上游慢或不稳定 | 固定源码偶发下载失败，直接改 URL 又会破坏源码身份 | `fetch` 支持传输层 URL 前缀重写，缓存按内容 SHA-256 寻址并在离线模式复验 | 已修复 |
 | macOS 自带旧版 rsync 不支持 `--info=stats2` | 首次向构建机同步新增源码缓存时，命令在传输前退出 | 改用兼容的 `--stats`；随后 11 个文件一次同步并在远端按内容哈希复验 | 已规避；不属于项目或上游缺陷 |

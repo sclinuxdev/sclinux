@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "shadow"
 version = "4.20.2"
-release = "3"
+release = "4"
 description = "Password and account management utilities (passwd, useradd, login, su, ...)"
 license = "BSD-3-Clause"
 channel = "system"
@@ -30,12 +30,13 @@ prepare = [
 
 build = [
     "touch /usr/bin/passwd 2>/dev/null || true",
-    "./configure --sysconfdir=/etc --disable-static --with-bcrypt --with-yescrypt --without-libbsd --disable-logind --with-group-name-max-length=32",
+    "./configure --prefix=/usr --sbindir=/usr/bin --sysconfdir=/etc --disable-static --with-bcrypt --with-yescrypt --without-libbsd --disable-logind --with-group-name-max-length=32",
     "make -j$(nproc)",
 ]
 
 install = [
     "make exec_prefix=/usr install DESTDIR=$DESTDIR",
     "make -C man install-man DESTDIR=$DESTDIR",
-    "rm -f $DESTDIR/usr/sbin/nologin $DESTDIR/usr/share/man/man8/nologin.8*",
+    "if [ -d $DESTDIR/usr/sbin ]; then mv $DESTDIR/usr/sbin/* $DESTDIR/usr/bin/; rmdir $DESTDIR/usr/sbin; fi",
+    "rm -f $DESTDIR/usr/bin/nologin $DESTDIR/usr/share/man/man8/nologin.8*",
 ]

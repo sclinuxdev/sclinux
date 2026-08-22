@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "gettext"
 version = "1.0"
-release = "2"
+release = "3"
 description = "GNU internationalization (i18n) tools and libintl"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -28,9 +28,11 @@ prepare = [
 build = [
     "./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/gettext-1.0",
     "make -j$(nproc)",
+    "rm -f gettext-runtime/libasprintf/libasprintf.la gettext-runtime/libasprintf/.libs/libasprintf.so gettext-runtime/libasprintf/.libs/libasprintf.so.0 gettext-runtime/libasprintf/.libs/libasprintf.so.0.0.0 gettext-runtime/libasprintf/.libs/libasprintf.la gettext-runtime/libasprintf/.libs/libasprintf.lai gettext-runtime/libasprintf/.libs/libasprintf.expsym && make -C gettext-runtime/libasprintf libasprintf.la CXXLINK=false",
 ]
 
 install = [
     "make install DESTDIR=$DESTDIR",
     "chmod -v 0755 $DESTDIR/usr/lib/preloadable_libintl.so",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "glibc"
 version = "2.44"
-release = "3"
+release = "6"
 description = "The GNU C Library"
 license = "LGPL-2.1-or-later"
 channel = "system"
@@ -39,6 +39,9 @@ build = [
 
 install = [
     "cd build && env -u CPATH -u LIBRARY_PATH make install DESTDIR=$DESTDIR",
+    "for directory in $DESTDIR/sbin $DESTDIR/usr/sbin; do if [ -d $directory ]; then mkdir -p $DESTDIR/usr/bin; mv $directory/* $DESTDIR/usr/bin/; rmdir $directory; fi; done",
+    "sed -i 's@/usr/lib/@@g' $DESTDIR/usr/lib/libc.so",
     "mkdir -p $DESTDIR/usr/lib/locale",
     "sed '/RTLDLIST/s@/usr@@g' -i $DESTDIR/usr/bin/ldd 2>/dev/null || true",
+    "rm -f $DESTDIR/etc/ld.so.cache $DESTDIR/usr/share/info/dir",
 ]
