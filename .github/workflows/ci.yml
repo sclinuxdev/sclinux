@@ -40,12 +40,10 @@ jobs:
         run: python3 tests/check-links.py
 
       # 被 force-push 或 rebase-merge 改写掉的钉还能下载一阵子，然后开始 404，
-      # 据此记录的构建一并失效。只有 forge 能回答这个钉是否仍在上游分支上，
-      # 所以这一项需要网络。GITHUB_TOKEN 用来避开未认证 API 的每 IP 限额。
+      # 据此记录的构建一并失效。判据只在上游的提交图里，所以这一项需要网络：
+      # 用 --filter=blob:none 取回默认分支的图，再由 git 判定祖先关系。
       - name: upstream pin checker fixtures
         run: python3 tests/test-check-pins.py
 
       - name: upstream commit pins
         run: python3 tests/check-pins.py --require-network
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
