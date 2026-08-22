@@ -1228,6 +1228,40 @@ def main() -> int:
             [(True, True), (True, True)],
         )
 
+        linked_workspace = Path(directory) / "linked-workspace"
+        linked_workspace.mkdir()
+        linked_overlap_results = []
+        for input_name in ("recipes", "sources"):
+            external_input = Path(directory) / f"external-{input_name}"
+            external_input.mkdir()
+            (external_input / ".stage1-build-packages").mkdir()
+            external_sentinel = external_input / "input-data"
+            external_sentinel.write_bytes(payload)
+            (linked_workspace / input_name).symlink_to(
+                external_input, target_is_directory=True
+            )
+            try:
+                build.reset_stage1_build_sysroot(
+                    external_input,
+                    linked_workspace / "build-sysroot",
+                    linked_workspace,
+                )
+            except build.ConfigError as exc:
+                linked_overlap_error = str(exc)
+            else:
+                linked_overlap_error = "no error"
+            linked_overlap_results.append(
+                (
+                    "must not overlap workspace inputs" in linked_overlap_error,
+                    external_sentinel.is_file(),
+                )
+            )
+        failed += not check(
+            "Stage1 resolves linked recipe and source inputs before reset checks",
+            linked_overlap_results,
+            [(True, True), (True, True)],
+        )
+
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
         fixture_recipe.parent.mkdir()
         fixture_recipe.write_text(
