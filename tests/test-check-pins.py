@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Regression tests for the upstream pin checker.
+"""上游钉校验器的回归测试。
 
-The forge is stubbed: these assert how each comparison status is classified and
-that an outage stays distinguishable from an answer, without a network call.
+forge 被打桩：这里断言每种比较状态如何归类，以及故障与答案是否始终可区分，
+全程不发网络请求。
 """
 
 import importlib.util
@@ -16,7 +16,7 @@ spec.loader.exec_module(checker)
 
 
 def with_status(status: str):
-    """Stub fetch() so the repository lookup and the comparison both answer."""
+    """给 fetch() 打桩，让仓库查询与比较查询都能有应答。"""
 
     def fetch(url: str) -> dict:
         if "/compare/" in url:
@@ -40,8 +40,7 @@ def reachable_for(status: str) -> bool:
         checker.fetch = original
 
 
-# Counted rather than hand-maintained: a constant here drifts the moment a
-# case is added or removed, and then the summary stops meaning anything.
+# 用计数而不是手写常量：常量在增删用例的那一刻就会失准，之后这行汇总就没意义了。
 checks_run = 0
 
 
@@ -58,9 +57,8 @@ def check(description: str, actual: object, expected: object) -> bool:
 def main() -> int:
     failed = 0
 
-    # A pin is durable exactly when the default branch can reach it. "ahead" and
-    # "diverged" both describe a commit the branch never took -- the shape the
-    # rewritten Sage pull-request commit had.
+    # 钉是否可靠，取决于默认分支能否到达它。ahead 与 diverged 都描述分支从未走过
+    # 的提交 —— 被改写掉的那个 Sage pull request 提交就是这个形状。
     for status, expected in (
         ("behind", True),
         ("identical", True),
@@ -74,7 +72,7 @@ def main() -> int:
             expected,
         )
 
-    # An outage must not read as a verdict either way.
+    # 故障不能被读成任何一种判定。
     original = checker.fetch
     checker.fetch = outage
     try:
@@ -87,8 +85,8 @@ def main() -> int:
     finally:
         checker.fetch = original
 
-    # Only a 40-character commit is a pin. Release tarballs and tag archives
-    # name a version, which upstream is expected to keep serving.
+    # 只有 40 位提交号算钉。release tarball 与 tag 归档给的是版本号，
+    # 上游本来就应当持续提供。
     commit = "a" * 40
     failed += not check(
         "codeload commit archives are recognised as pins",
@@ -119,7 +117,7 @@ def main() -> int:
         [],
     )
 
-    # Build products carry copies of recipes; walking them would double-report.
+    # 构建产物里带着配方副本，一并遍历会重复报告。
     failed += not check(
         "build product directories are skipped",
         {"pkg", "src", "distfiles", "out"} <= checker.SKIP_DIRS,

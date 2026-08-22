@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Check that every pinned upstream commit still lives on its upstream branch.
+"""校验配方钉住的上游提交仍然活在上游分支上。
 
-Recipes pin third-party sources by commit. A commit that a force-push or a
-rebase-merge rewrote away stays downloadable for a while and then stops: the
-archive URL starts returning 404 and every build recorded against it becomes
-unreproducible. That already happened once here -- Stage1 pinned a Sage commit
-from a pull-request branch, the branch was rebased while the pull request was
-being reviewed, and the pinned commit ended up reachable from no branch at all.
+配方按提交钉住第三方源码。被 force-push 或 rebase-merge 改写掉的提交还能下载一阵子，
+然后就不能了：归档 URL 开始返回 404，所有据此记录的构建都不再可复现。这里真实发生过
+一次 —— Stage1 钉了 Sage 一个 pull request 分支上的提交，评审期间那条分支被 rebase，
+钉住的提交最后不属于任何分支。
 
-Nothing local can catch that, because the recipe still parses and the checksum
-still matches whatever the cache holds. So this asks the forge whether the
-pinned commit is an ancestor of the upstream default branch.
+本地什么都查不出来，因为配方照样解析、校验和照样匹配缓存里的内容。只有 forge 知道那个
+提交是否仍能从上游默认分支到达，所以这里去问它。
 
-    python3 tests/check-pins.py                    # skips when the API is unreachable
-    python3 tests/check-pins.py --require-network  # network failure is a failure (CI)
+    python3 tests/check-pins.py                    # 网络不可达时跳过
+    python3 tests/check-pins.py --require-network  # 网络失败即失败（CI 用）
+
+设置 GITHUB_TOKEN 会带上认证：未认证的 GitHub API 限额是每 IP 每小时 60 次，而 Actions
+runner 共享出口 IP，撞上限额会让健康的构建失败。
 """
 
 import argparse
 import http.client
 import json
+import os
 import re
 import sys
 import time
@@ -29,22 +30,21 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".github", "pkg", "src", "distfiles", "out"}
 
-# codeload and the /archive/ endpoint both name the commit in the last path
-# segment; anything else (a release tarball, a version tag) is not a pin.
+# codeload 与 /archive/ 两个入口都把提交号放在路径最后一段；其余形式（release
+# tarball、版本 tag）不是按提交钉的，不在此列。
 GITHUB_COMMIT = re.compile(
     r"https://(?:codeload\.github\.com|github\.com)/([^/]+)/([^/]+)/"
     r"(?:tar\.gz|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})"
 )
 
-# per_page=1 keeps the response small: a diverged comparison otherwise carries
-# the full commit list, and only the summary status is read here.
+# per_page=1 把响应压小：diverged 的比较结果会带上完整提交列表，而这里只读 status。
 API = "https://api.github.com/repos/{owner}/{repo}/compare/{base}...{head}?per_page=1"
 
 ATTEMPTS = 3
 
 
 class Unreachable(Exception):
-    """The forge could not be asked -- distinct from a failed answer."""
+    """问不到 forge —— 与「问到了但答案是否定的」不是一回事。"""
 
 
 def recipes():
@@ -55,10 +55,22 @@ def recipes():
 
 
 def pins():
-    """(recipe, owner, repo, commit) for every GitHub commit pin in the tree."""
+    """产出全树每一处 GitHub 提交钉：(配方路径, owner, repo, commit)。"""
     for path in recipes():
         for owner, repo, commit in GITHUB_COMMIT.findall(path.read_text()):
             yield path, owner, repo.removesuffix(".git"), commit
+
+
+def headers() -> dict:
+    head = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "sclinux-pin-check",
+    }
+    # CI 注入 GITHUB_TOKEN 以拿到较高限额；本地不设也能跑，只是受未认证配额约束。
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        head["Authorization"] = f"Bearer {token}"
+    return head
 
 
 def default_branch(owner: str, repo: str) -> str:
@@ -66,24 +78,23 @@ def default_branch(owner: str, repo: str) -> str:
 
 
 def fetch(url: str) -> dict:
-    request = urllib.request.Request(
-        url, headers={"Accept": "application/vnd.github+json", "User-Agent": "sclinux-pin-check"}
-    )
+    request = urllib.request.Request(url, headers=headers())
     last = ""
     for attempt in range(ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 return json.loads(response.read())
         except urllib.error.HTTPError as error:
-            # 404 on the compare endpoint means the commit is not in this
-            # repository at all; that is an answer, not an outage.
+            # 比较入口返回 404 表示这个提交根本不在该仓库里 —— 这是答案，不是故障。
             if error.code == 404:
                 return {"status": "missing"}
-            raise Unreachable(f"{url}: HTTP {error.code}") from error
+            hint = ""
+            if error.code in (403, 429):
+                hint = "（限额或权限；设置 GITHUB_TOKEN 可提高配额）"
+            raise Unreachable(f"{url}: HTTP {error.code}{hint}") from error
         except (urllib.error.URLError, http.client.HTTPException, OSError,
                 json.JSONDecodeError) as error:
-            # A truncated response or a dropped connection is an outage, not
-            # an answer about the pin. Retry before giving up on it.
+            # 响应被截断或连接中断属于故障，不是关于这个钉的答案。先重试再放弃。
             last = repr(error)
             if attempt + 1 < ATTEMPTS:
                 time.sleep(1 + attempt)
@@ -91,11 +102,10 @@ def fetch(url: str) -> dict:
 
 
 def ancestor_of_default(owner: str, repo: str, commit: str) -> tuple[bool, str]:
-    """Is `commit` reachable from the upstream default branch?"""
+    """判断 commit 是否能从上游默认分支到达。"""
     base = default_branch(owner, repo)
-    # base...head is "behind" when head is an ancestor of base, "identical" when
-    # they are the same commit. "ahead" and "diverged" both mean the pin sits on
-    # a line the default branch never took.
+    # base...head 为 behind 表示 head 是 base 的祖先，identical 表示两者是同一个提交。
+    # ahead 与 diverged 都意味着这个钉落在默认分支从未走过的线上。
     status = fetch(API.format(owner=owner, repo=repo, base=base, head=commit)).get("status")
     return status in {"behind", "identical"}, f"{status} relative to {base}"
 
