@@ -1,0 +1,25 @@
+schema_version = 1
+
+[architectures.x86_64]
+gnu_triplet = "x86_64-pc-linux-gnu"
+kernel_arch = "x86"
+kernel_image = "arch/x86/boot/bzImage"
+efi_boot_name = "BOOTX64.EFI"
+systemd_boot_efi = "systemd-bootx64.efi"
+kernel_console = "ttyS0,115200"
+dynamic_linker = "ld-linux-x86-64.so.2"
+qemu_system = "qemu-system-x86_64"
+qemu_machine = "q35"
+oci_platform = "linux/amd64"
+
+[architectures.aarch64]
+gnu_triplet = "aarch64-unknown-linux-gnu"
+kernel_arch = "arm64"
+kernel_image = "arch/arm64/boot/Image"
+efi_boot_name = "BOOTAA64.EFI"
+systemd_boot_efi = "systemd-bootaa64.efi"
+kernel_console = "ttyAMA0,115200"
+dynamic_linker = "ld-linux-aarch64.so.1"
+qemu_system = "qemu-system-aarch64"
+qemu_machine = "virt"
+oci_platform = "linux/arm64"

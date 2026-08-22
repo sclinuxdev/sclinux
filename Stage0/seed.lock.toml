@@ -1,0 +1,34 @@
+schema_version = 1
+image = "docker.io/library/debian"
+suite = "forky"
+snapshot = "20260803T000000Z"
+source_date_epoch = 1785715200
+index_digest = "sha256:30942636e2c40213be85033020ceb8f9b788f7b5c29d48b8f5d152b87717c0a4"
+
+packages = [
+    "bison",
+    "bzip2",
+    "ca-certificates",
+    "curl",
+    "file",
+    "flex",
+    "g++",
+    "gcc",
+    "git",
+    "libcurl4-openssl-dev",
+    "liblmdb-dev",
+    "libtomlplusplus-dev",
+    "libzstd-dev",
+    "make",
+    "patch",
+    "pkg-config",
+    "python3",
+    "tar",
+    "xmake",
+    "xz-utils",
+    "zstd",
+]
+
+[manifests]
+x86_64 = "sha256:5897504cb64f026d2b1c8dc6487b1e799ef6cdd362c3d604968256d413718728"
+aarch64 = "sha256:4721beb0c0181188547912dfe6635f41f43ca3ecdd3d15710dbec0e470774ec1"
