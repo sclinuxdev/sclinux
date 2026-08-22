@@ -758,6 +758,11 @@ def reset_stage1_build_sysroot(
         raise ConfigError("the native Stage1 root must not be reset as a scratch sysroot")
     if sysroot == workspace or sysroot in workspace.parents:
         raise ConfigError(f"Stage1 build sysroot must not contain its workspace: {sysroot}")
+    managed_inputs = (workspace / "recipes", workspace / "sources")
+    if any(sysroot == path or path in sysroot.parents for path in managed_inputs):
+        raise ConfigError(
+            f"Stage1 build sysroot must not overlap workspace inputs: {sysroot}"
+        )
     if sysroot.is_symlink() or (sysroot.exists() and not sysroot.is_dir()):
         raise ConfigError(
             f"Stage1 build sysroot must be a directory, not a symlink: {sysroot}"

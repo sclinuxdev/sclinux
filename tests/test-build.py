@@ -1201,6 +1201,33 @@ def main() -> int:
             (True, True),
         )
 
+        source_input = resume_workspace / "sources/cache"
+        source_input.mkdir(parents=True)
+        source_sentinel = source_input / "locked-source"
+        source_sentinel.write_bytes(payload)
+        input_overlap_results = []
+        for candidate, sentinel in (
+            (resume_recipes / "one", resume_recipes / "one/recipe.toml"),
+            (source_input, source_sentinel),
+        ):
+            (candidate / ".stage1-build-packages").mkdir()
+            try:
+                build.reset_stage1_build_sysroot(
+                    candidate, resume_workspace / "build-sysroot", resume_workspace
+                )
+            except build.ConfigError as exc:
+                overlap_error = str(exc)
+            else:
+                overlap_error = "no error"
+            input_overlap_results.append(
+                ("must not overlap workspace inputs" in overlap_error, sentinel.is_file())
+            )
+        failed += not check(
+            "Stage1 rejects scratch sysroots inside recipe and source inputs",
+            input_overlap_results,
+            [(True, True), (True, True)],
+        )
+
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
         fixture_recipe.parent.mkdir()
         fixture_recipe.write_text(
