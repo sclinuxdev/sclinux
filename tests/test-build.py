@@ -1138,6 +1138,40 @@ def main() -> int:
             (["two"], ["one", "two"], [True, True]),
         )
 
+        native_staged_names = []
+
+        def record_native_package(entry, *_args, **_kwargs):
+            native_staged_names.append(entry["name"])
+
+        with (
+            mock.patch.object(build, "validate_stage1_procfs"),
+            mock.patch.object(build, "load_stage1_manifest", return_value=resume_names),
+            mock.patch.object(build, "validate_rendered_stage1_recipes"),
+            mock.patch.object(build, "stage1_build_environment", return_value={}),
+            mock.patch.object(build, "refresh_stage1_tool_wrappers"),
+            mock.patch.object(build, "clean_stage1_build_sysroot") as mocked_clean,
+            mock.patch.object(
+                build, "stage_stage1_package", side_effect=record_native_package
+            ),
+            mock.patch.object(build.subprocess, "run", side_effect=create_resumed_artifact),
+        ):
+            native_resumed = build.run_stage1_packages(
+                {"arch": "aarch64"},
+                resume_workspace,
+                first="two",
+                last="two",
+                sysroot=Path("/"),
+            )
+        failed += not check(
+            "Stage1 native resume preserves the live root and stages no prior artifacts",
+            (
+                [entry["name"] for entry in native_resumed],
+                native_staged_names,
+                mocked_clean.call_count,
+            ),
+            (["two"], ["two"], 0),
+        )
+
         fixture_recipe = Path(directory) / "fixture" / "recipe.toml"
         fixture_recipe.parent.mkdir()
         fixture_recipe.write_text(

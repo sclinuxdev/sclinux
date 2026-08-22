@@ -752,6 +752,8 @@ def clean_stage1_build_sysroot(sysroot: Path) -> None:
 
 
 def reset_stage1_build_sysroot(sysroot: Path, default_sysroot: Path) -> None:
+    if sysroot == Path("/"):
+        raise ConfigError("the native Stage1 root must not be reset as a scratch sysroot")
     if sysroot.is_symlink() or (sysroot.exists() and not sysroot.is_dir()):
         raise ConfigError(
             f"Stage1 build sysroot must be a directory, not a symlink: {sysroot}"
@@ -978,20 +980,23 @@ def run_stage1_packages(
     built = []
     default_sysroot = workspace / "build-sysroot"
     sysroot = sysroot or default_sysroot
-    preceding = manifest[: manifest.index(packages[0])]
+    native_sysroot = sysroot == Path("/")
+    preceding = [] if native_sysroot else manifest[: manifest.index(packages[0])]
     missing = [name for name in preceding if name not in locked_by_name]
     if missing:
         raise ConfigError(
             "cannot resume Stage1; preceding package artifact(s) are missing: "
             + ", ".join(missing)
         )
-    reset_stage1_build_sysroot(sysroot, default_sysroot)
+    if not native_sysroot:
+        reset_stage1_build_sysroot(sysroot, default_sysroot)
     environment = stage1_build_environment(sysroot=sysroot)
     for name in preceding:
         stage_stage1_package(
             locked_by_name[name], recipes / name / "recipe.toml", sysroot, environment
         )
-    clean_stage1_build_sysroot(sysroot)
+    if not native_sysroot:
+        clean_stage1_build_sysroot(sysroot)
     refresh_stage1_tool_wrappers(sysroot, architecture)
     environment = stage1_build_environment(sysroot=sysroot)
     for name in packages:
@@ -1016,7 +1021,8 @@ def run_stage1_packages(
         built.append(entry)
         locked_by_name[name] = entry
         stage_stage1_package(entry, recipe_path, sysroot, environment)
-        clean_stage1_build_sysroot(sysroot)
+        if not native_sysroot:
+            clean_stage1_build_sysroot(sysroot)
         refresh_stage1_tool_wrappers(sysroot, architecture)
         environment = stage1_build_environment(sysroot=sysroot)
         clean_stage1_workdirs(recipe_path.parent)
