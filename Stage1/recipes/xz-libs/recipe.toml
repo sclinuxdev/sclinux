@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "xz-libs"
 version = "5.8.3"
-release = "1"
+release = "2"
 description = "liblzma shared library and header"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -30,4 +30,5 @@ build = [
 
 install = [
     "make install DESTDIR=$DESTDIR",
+    "rm -rf $DESTDIR/usr/share/locale",
 ]

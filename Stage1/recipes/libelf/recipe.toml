@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "libelf"
 version = "0.196"
-release = "1"
+release = "2"
 description = "libelf shared library for reading ELF files (from elfutils)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -30,7 +30,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --disable-debuginfod --enable-libdebuginfod=dummy",
+    "CFLAGS=\"-O2 -Wno-error=format-nonliteral\" ./configure --prefix=/usr --disable-debuginfod --enable-libdebuginfod=dummy",
     "make -C lib -j$(nproc)",
     "make -C libelf -j$(nproc)",
 ]

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "libffi"
 version = "3.8.0"
-release = "1"
+release = "2"
 description = "Portable Foreign Function Interface library"
 license = "MIT"
 channel = "system"
@@ -27,10 +27,11 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --disable-static --with-gcc-arch=native",
+    "./configure --prefix=/usr --libdir=/usr/lib --disable-static --disable-multi-os-directory --with-gcc-arch=native",
     "make -j$(nproc)",
 ]
 
 install = [
     "make install DESTDIR=$DESTDIR",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

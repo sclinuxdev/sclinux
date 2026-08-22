@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "dbus"
 version = "1.16.2"
-release = "1"
+release = "2"
 description = "D-Bus message bus system (daemon and libdbus)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -32,7 +32,7 @@ prepare = [
 
 build = [
     "mkdir build",
-    "cd build && meson setup --prefix=/usr --buildtype=release --wrap-mode=nofallback ..",
+    "cd build && meson setup --prefix=/usr --libdir=lib --buildtype=release --wrap-mode=nofallback -Dsystemd_system_unitdir=/usr/lib/systemd/system -Dsystemd_user_unitdir=/usr/lib/systemd/user ..",
     "cd build && ninja -j$(nproc)",
 ]
 

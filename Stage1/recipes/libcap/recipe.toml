@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "libcap"
 version = "2.78"
-release = "1"
+release = "2"
 description = "POSIX 1003.1e capabilities library"
 license = "BSD-3-Clause"
 channel = "system"
@@ -27,9 +27,9 @@ prepare = [
 ]
 
 build = [
-    "make prefix=/usr lib=lib PAM_CAP=no GOLANG=no -j$(nproc)",
+    "make prefix=/usr SBINDIR=/usr/bin lib=lib PAM_CAP=no GOLANG=no -j$(nproc)",
 ]
 
 install = [
-    "make prefix=/usr lib=lib PAM_CAP=no GOLANG=no install DESTDIR=$DESTDIR",
+    "make prefix=/usr SBINDIR=/usr/bin lib=lib PAM_CAP=no GOLANG=no install DESTDIR=$DESTDIR",
 ]

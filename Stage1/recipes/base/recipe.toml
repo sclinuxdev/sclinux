@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "base"
 version = "2.0.0"
-release = "1"
+release = "3"
 description = "sclinux Base System Meta-Package (Stage 1)"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -46,6 +46,7 @@ dependencies = [
     "acl",
     "libcap",
     "libseccomp",
+    "libunistring",
     "coreutils",
     "gmp",
     "mpfr",
@@ -59,6 +60,9 @@ dependencies = [
     "openssl-libs",
     "openssl-dev",
     "curl",
+    "libarchive",
+    "cmake",
+    "fastfetch",
     "tomlplusplus",
     "sage",
     "util-linux",
@@ -90,6 +94,7 @@ dependencies = [
     "packaging",
     "wheel",
     "setuptools",
+    "python-pyelftools",
     "meson",
     "ninja",
     "expat",
@@ -108,8 +113,21 @@ dependencies = [
     "shadow",
     "kmod",
     "systemd",
+    "libaio",
+    "lvm2",
+    "libinih",
+    "liburcu",
+    "xfsprogs",
+    "dosfstools",
+    "popt",
+    "gptfdisk",
+    "efivar",
+    "efibootmgr",
     "dbus",
     "man-db",
+    "linux-zen",
+    "mkinitcpio",
+    "sclinux-boot",
 ]
 
 provides = [

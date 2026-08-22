@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "base-files"
 version = "1.0.0"
-release = "4"
+release = "6"
 description = "FHS standard filesystem hierarchy and essential system files"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -37,12 +37,11 @@ install = [
     "ln -sf usr/lib $DESTDIR/lib64",
     "ln -sf lib $DESTDIR/usr/lib64",
     "ln -sf ../run $DESTDIR/var/run",
-    "printf 'root:x:0:0:root:/root:/bin/bash\nbin:x:1:1:bin:/dev/null:/bin/false\ndaemon:x:6:6:Daemon User:/dev/null:/bin/false\nmessagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/bin/false\nsystemd-journal-remote:x:996:996:systemd Journal Remote:/dev/null:/bin/false\nsystemd-network:x:997:997:systemd Network Management:/dev/null:/bin/false\nsystemd-resolve:x:998:998:systemd Resolver:/dev/null:/bin/false\nsystemd-timesync:x:999:999:systemd Time Synchronization:/dev/null:/bin/false\nnobody:x:65534:65534:Nobody:/:/bin/false\n' > $DESTDIR/etc/passwd",
-    "printf 'root:x:0:\nbin:x:1:daemon\nsys:x:2:\nadm:x:4:\ntty:x:5:\ndaemon:x:6:\ndisk:x:8:\nwheel:x:10:root\nmessagebus:x:18:\nsystemd-journal:x:995:\nsystemd-journal-remote:x:996:\nsystemd-network:x:997:\nsystemd-resolve:x:998:\nsystemd-timesync:x:999:\nusers:x:999:\nnogroup:x:65534:\n' > $DESTDIR/etc/group",
+    "printf 'root:x:0:0:root:/root:/bin/bash\nbin:x:1:1:bin:/dev/null:/bin/false\ndaemon:x:6:6:Daemon User:/dev/null:/bin/false\nmessagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/bin/false\nsystemd-oom:x:994:994:systemd Userspace OOM Killer:/dev/null:/bin/false\nsystemd-journal-remote:x:996:996:systemd Journal Remote:/dev/null:/bin/false\nsystemd-network:x:997:997:systemd Network Management:/dev/null:/bin/false\nsystemd-resolve:x:998:998:systemd Resolver:/dev/null:/bin/false\nsystemd-timesync:x:999:999:systemd Time Synchronization:/dev/null:/bin/false\nnobody:x:65534:65534:Nobody:/:/bin/false\n' > $DESTDIR/etc/passwd",
+    "printf 'root:x:0:\nbin:x:1:daemon\nsys:x:2:\nadm:x:4:\ntty:x:5:\ndaemon:x:6:\ndisk:x:8:\nwheel:x:10:root\nmessagebus:x:18:\nsystemd-oom:x:994:\nsystemd-journal:x:995:\nsystemd-journal-remote:x:996:\nsystemd-network:x:997:\nsystemd-resolve:x:998:\nsystemd-timesync:x:999:\nusers:x:999:\nnogroup:x:65534:\n' > $DESTDIR/etc/group",
     "printf 'root::19700:0:99999:7:::\nbin:*:19700:0:99999:7:::\ndaemon:*:19700:0:99999:7:::\nnobody:*:19700:0:99999:7:::\n' > $DESTDIR/etc/shadow",
     "chmod 0600 $DESTDIR/etc/shadow",
     "printf '/bin/sh\n/bin/bash\n' > $DESTDIR/etc/shells",
-    "printf '# /etc/fstab\n# <file system> <mount point>   <type>  <options>       <dump>  <pass>\n' > $DESTDIR/etc/fstab",
     "printf 'sage\n' > $DESTDIR/etc/hostname",
     "printf '127.0.0.1   localhost sage\n::1         localhost ip6-localhost ip6-loopback\n' > $DESTDIR/etc/hosts",
     "printf 'passwd: files systemd\ngroup: files [SUCCESS=merge] systemd\nshadow: files systemd\nhosts: mymachines resolve [!UNAVAIL=return] files myhostname dns\nnetworks: files\n' > $DESTDIR/etc/nsswitch.conf",

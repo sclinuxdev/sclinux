@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "flit-core"
 version = "4.0.2"
-release = "1"
+release = "2"
 description = "Python PEP 517 build backend (flit_core)"
 license = "BSD-3-Clause"
 channel = "system"
@@ -32,5 +32,6 @@ build = [
 ]
 
 install = [
-    "python3 bootstrap_install.py --install-root=$DESTDIR dist/flit_core-*.whl",
+    "mkdir -p $DESTDIR/usr/lib/python3.14/site-packages",
+    "python3 -c \"import sys, zipfile, glob; [zipfile.ZipFile(f).extractall(sys.argv[1]) for f in glob.glob('dist/*.whl')]\" $DESTDIR/usr/lib/python3.14/site-packages",
 ]

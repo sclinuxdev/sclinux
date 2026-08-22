@@ -1,0 +1,15 @@
+#!/bin/sh
+# Unprivileged chroot-compatible front-end for restricted build hosts.
+# PRoot 5.4.0 or newer is required for faccessat2 path translation.
+
+set -eu
+
+if [ "$#" -lt 2 ]; then
+    echo "usage: chroot ROOT COMMAND [ARG...]" >&2
+    exit 2
+fi
+
+target_root=$(readlink -f "$1")
+shift
+
+exec proot -R "$target_root" "$@"

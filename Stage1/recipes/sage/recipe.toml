@@ -3,20 +3,21 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "5"
+release = "14"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
 
 dependencies = [
     "lmdb >= 0.9.30",
-    "zstd >= 1.5.0",
-    "tomlplusplus >= 3.4.0",
+    "zstd-libs >= 1.5.0",
     "curl >= 8.0.0",
     "gcc-libs >= 15.3.0",
 ]
 
 build_dependencies = [
+    "gcc >= 15.3.0",
+    "tomlplusplus >= 3.4.0",
     "xmake >= 3.0.0",
 ]
 
@@ -28,11 +29,15 @@ prepare = [
 ]
 
 build = [
-    # 全量重建在 chroot 内进行：宿主编排器将 distro 根 bind-mount 到 /distro
-    "cd /distro/sage && XMAKE_ROOT=y xmake f -c -m release -y && XMAKE_ROOT=y xmake -y",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake f -c -m release -y --ldflags=\"$LDFLAGS\"",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake -y",
 ]
 
 install = [
-    "mkdir -p $DESTDIR/usr/bin $DESTDIR/etc/sage",
-    "cp -av /distro/sage/build/linux/x86_64/release/sage $DESTDIR/usr/bin/sage",
+    "XMAKE_ROOT=y XMAKE_STATS=false xmake install -o \"$DESTDIR/usr\" -y",
+    "install -Dm755 ../shc \"$DESTDIR/usr/bin/shc\"",
 ]
+
+[source]
+url = "https://codeload.github.com/sclinuxdev/sage/tar.gz/77b0e29a22cd6e3883aaf7e1823980e140432f0d"
+sha256 = "7b2bfca4d74401c11216d6c743756f0306ef33b8d07e997adc7dfc0fc6458e5b"

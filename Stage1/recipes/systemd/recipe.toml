@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "systemd"
 version = "261.2"
-release = "1"
+release = "6"
 description = "System and service manager (init), udev, journald"
 license = "LGPL-2.1-or-later"
 channel = "system"
@@ -22,6 +22,7 @@ dependencies = [
     "openssl-libs >= 4.0.0",
     "pcre2-libs >= 10.40",
     "glibc >= 2.44",
+    "python-pyelftools >= 0.33",
 ]
 
 build_dependencies = [
@@ -52,11 +53,19 @@ prepare = [
 
 build = [
     "mkdir -p build",
-    "cd build && meson setup .. --prefix=/usr --buildtype=release -D default-dnssec=no -D firstboot=false -D install-tests=false -D ldconfig=false -D sysusers=false -D rpmmacrosdir=no -D homed=disabled -D man=disabled -D mode=release -D pamconfdir=no -D dev-kvm-mode=0660 -D nobody-group=nogroup -D sysupdate=disabled -D ukify=disabled -D docdir=/usr/share/doc/systemd-261.2",
-    "cd build && ninja -j$(nproc)",
+    "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" meson setup .. --prefix=/usr --sbindir=bin --libdir=lib --buildtype=release -D default-dnssec=no -D firstboot=false -D install-tests=false -D ldconfig=false -D sysusers=false -D rpmmacrosdir=no -D homed=disabled -D man=disabled -D mode=release -D pamconfdir=no -D dev-kvm-mode=0660 -D nobody-group=nogroup -D sysupdate=disabled -D ukify=disabled -D dbuspolicydir=/usr/share/dbus-1/system.d -D dbussessionservicedir=/usr/share/dbus-1/services -D dbussystemservicedir=/usr/share/dbus-1/system-services -D dbus-interfaces-dir=/usr/share/dbus-1/interfaces -D efi=true -D bootloader=enabled -D sbat-distro=sclinux -D sbat-distro-generation=1 -D sbat-distro-version=261.2-5 -D sbat-distro-summary='ShenChen Linux' -D sbat-distro-url=https://github.com/sclinuxdev/sclinux -D docdir=/usr/share/doc/systemd-261.2",
+    "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" ninja -j$(nproc)",
 ]
 
 install = [
-    "cd build && DESTDIR=$DESTDIR ninja install",
+    "cd build && env -u CPATH CPPFLAGS= C_INCLUDE_PATH=\"$SC_BUILD_SYSROOT/usr/include\" DESTDIR=$DESTDIR ninja install",
+    "if [ -d $DESTDIR/usr/sbin ]; then mv $DESTDIR/usr/sbin/* $DESTDIR/usr/bin/; rmdir $DESTDIR/usr/sbin; fi",
     "rm -rf $DESTDIR/usr/share/doc 2>/dev/null || true",
+    # systemd 只往 usr/share/mime/packages/ 放一个 io.systemd.xml，声明它自己的
+    # journal/DDI 文件类型。这个目录会命中 sage 内置的 mime-database 触发器，
+    # 而触发器要执行的 /usr/bin/update-mime-database 由 shared-mime-info 提供，
+    # 本仓库没有这个包 —— sage 77b0e29 起触发器缺可执行文件是硬失败（提交
+    # 9190268 把 fail-open 改成了 fail-closed），于是整笔安装返回 1。
+    # 打包 shared-mime-info 之后应当撤销这一行，让 systemd 的 MIME 类型生效。
+    "rm -rf $DESTDIR/usr/share/mime 2>/dev/null || true",
 ]
