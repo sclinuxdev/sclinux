@@ -161,14 +161,14 @@ def main() -> int:
         (sage_recipe["source"]["url"], sage_recipe["source"]["sha256"]),
         (
             "https://codeload.github.com/sclinuxdev/sage/tar.gz/"
-            "f2d18f7f30f5cdc690b9ebb288858ae04f3337df",
-            "95f67392824bb00048ccb5b012e094e4861e12f43f3b8ea335a2fd5e9b3f2860",
+            "77b0e29a22cd6e3883aaf7e1823980e140432f0d",
+            "7b2bfca4d74401c11216d6c743756f0306ef33b8d07e997adc7dfc0fc6458e5b",
         ),
     )
     sage_helper = (REPO / "Stage1" / "recipes" / "sage" / "shc").read_text()
     failed += not check(
         "Sage package installs the tested SCLinux shorthand wrapper",
-        sage_recipe["package"]["release"] == "13"
+        sage_recipe["package"]["release"] == "14"
         and 'install -Dm755 ../shc "$DESTDIR/usr/bin/shc"'
         in sage_recipe["package"]["install"]
         and sage_helper == (REPO / "scripts" / "shc").read_text(),
