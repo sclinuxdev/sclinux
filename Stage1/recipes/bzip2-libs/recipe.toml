@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "bzip2-libs"
 version = "1.0.8"
-release = "1"
+release = "2"
 description = "libbz2 shared library and header"
 license = "bzip2-1.0.6"
 channel = "system"
@@ -22,17 +22,20 @@ provides = [
 ]
 
 prepare = [
+    "sed -i 's/$(CC) -shared/$(CC) $(LDFLAGS) -shared/' Makefile-libbz2_so",
+    "sed -i 's/$(CC) $(CFLAGS) -o bzip2-shared/$(CC) $(CFLAGS) $(LDFLAGS) -o bzip2-shared/' Makefile-libbz2_so",
 ]
 
 build = [
     "make clean",
     "make -f Makefile-libbz2_so",
-    "make -j$(nproc)",
+    "make -j$(nproc) libbz2.a",
 ]
 
 install = [
     "mkdir -p $DESTDIR/usr/lib $DESTDIR/usr/include",
     "cp -av libbz2.so.1.0.8 $DESTDIR/usr/lib/",
+    "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so.1.0",
     "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so.1",
     "ln -sf libbz2.so.1.0.8 $DESTDIR/usr/lib/libbz2.so",
     "cp -av libbz2.a $DESTDIR/usr/lib/",

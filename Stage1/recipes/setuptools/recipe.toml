@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "setuptools"
 version = "84.0.0"
-release = "1"
+release = "2"
 description = "Python package build tool (setuptools)"
 license = "MIT"
 channel = "system"
@@ -37,4 +37,5 @@ build = [
 install = [
     "mkdir -p $DESTDIR/usr/lib/python3.14/site-packages",
     "python3 -c \"import sys, zipfile, glob; [zipfile.ZipFile(f).extractall(sys.argv[1]) for f in glob.glob('dist/*.whl')]\" $DESTDIR/usr/lib/python3.14/site-packages",
+    "install -m644 setuptools/config/_validate_pyproject/fastjsonschema_*.py $DESTDIR/usr/lib/python3.14/site-packages/setuptools/config/_validate_pyproject/",
 ]

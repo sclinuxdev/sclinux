@@ -1,0 +1,100 @@
+#!/usr/bin/expect -f
+
+if {$argc == 0} {
+    puts stderr "usage: qemu-login-smoke.exp QEMU ARGS..."
+    exit 2
+}
+
+set timeout 600
+if {[info exists env(SCLINUX_QEMU_TIMEOUT)]} {
+    if {![string is integer -strict $env(SCLINUX_QEMU_TIMEOUT)] || $env(SCLINUX_QEMU_TIMEOUT) <= 0} {
+        puts stderr "error: SCLINUX_QEMU_TIMEOUT must be a positive integer"
+        exit 2
+    }
+    set timeout $env(SCLINUX_QEMU_TIMEOUT)
+}
+set expected_arch "aarch64"
+if {[info exists env(SCLINUX_EXPECT_ARCH)]} {
+    set expected_arch $env(SCLINUX_EXPECT_ARCH)
+}
+if {[info exists env(SCLINUX_BOOT_LOG)]} {
+    log_file -noappend $env(SCLINUX_BOOT_LOG)
+}
+
+spawn {*}$argv
+expect {
+    -re {sage login:} {
+        send "root\r"
+    }
+    timeout {
+        puts stderr "error: timed out waiting for the serial login prompt"
+        exit 1
+    }
+    eof {
+        puts stderr "error: QEMU exited before the serial login prompt"
+        exit 1
+    }
+}
+
+expect {
+    -re {Password:} {
+        send "\r"
+        exp_continue
+    }
+    -re {[#$] $} {}
+    timeout {
+        puts stderr "error: timed out waiting for the root shell"
+        exit 1
+    }
+    eof {
+        puts stderr "error: QEMU exited before the root shell"
+        exit 1
+    }
+}
+
+send "stty -echo\r"
+expect {
+    -re {[#$] $} {}
+    timeout {
+        puts stderr "error: timed out while disabling terminal echo"
+        exit 1
+    }
+    eof {
+        puts stderr "error: QEMU exited while disabling terminal echo"
+        exit 1
+    }
+}
+
+set gate "set -eu; test \"\$(uname -m)\" = '$expected_arch'; test \"\$(findmnt -n -o FSTYPE /)\" = xfs; test \"\$(findmnt -n -o SOURCE /)\" = /dev/mapper/vg0-root; mountpoint -q /home; mountpoint -q /boot/efi; test \"\$(sage count)\" = 120; sage verify; shc tc list >/tmp/shc-toolchains; grep -q 'gcc.*15' /tmp/shc-toolchains; grep -q 'xmake.*3' /tmp/shc-toolchains; shc --version >/tmp/shc-version; XMAKE_ROOT=y xmake --version >/tmp/xmake-version 2>&1; grep -q 'xmake v3\\.' /tmp/xmake-version; systemctl --failed --no-legend --plain >/tmp/failed-units; if test -s /tmp/failed-units; then cat /tmp/failed-units; systemctl --no-pager status systemd-oomd.service || true; exit 1; fi; printf 'arch=%s\\nroot=%s\\npackages=%s\\n' \"\$(uname -m)\" \"\$(findmnt -n -o SOURCE,FSTYPE /)\" \"\$(sage count)\"; echo SCLINUX_GATE_PASS"
+send -- "$gate\r"
+
+expect {
+    -re {SCLINUX_GATE_PASS} {
+        send "stty echo; poweroff\r"
+    }
+    -re {[#$] $} {
+        puts stderr "error: runtime gate returned to the shell without passing"
+        exit 1
+    }
+    -re {sage login:} {
+        puts stderr "error: runtime gate exited the root shell"
+        exit 1
+    }
+    timeout {
+        puts stderr "error: timed out waiting for the runtime gate"
+        exit 1
+    }
+    eof {
+        puts stderr "error: QEMU exited before the runtime gate completed"
+        exit 1
+    }
+}
+
+expect {
+    -re {Power down} {}
+    eof {}
+    timeout {
+        puts stderr "error: timed out waiting for guest shutdown"
+        exit 1
+    }
+}

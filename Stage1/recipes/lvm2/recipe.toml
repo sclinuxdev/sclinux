@@ -1,0 +1,48 @@
+schema_version = 1
+
+[package]
+name = "lvm2"
+version = "2.03.42"
+release = "3"
+description = "Device Mapper and Logical Volume Manager userspace"
+license = "GPL-2.0-only AND LGPL-2.1-only"
+channel = "system"
+
+[source]
+url = "https://sourceware.org/pub/lvm2/LVM2.2.03.42.tgz"
+sha256 = "352703ef5b72ebb22d4f250284a29b89fe64d4049c6bf64c693f9af486c8081e"
+
+dependencies = [
+    "bash >= 5.2",
+    "glibc >= 2.44",
+    "libaio >= 0.3.113",
+    "readline >= 8.2",
+    "systemd >= 256.0",
+    "util-linux-libs >= 2.40",
+]
+
+build_dependencies = [
+    "gcc >= 15.3.0",
+    "make >= 4.4",
+    "pkgconf >= 2.0",
+]
+
+provides = [
+    "lvm2",
+    "device-mapper",
+    "so:libdevmapper.so.1.02",
+]
+
+prepare = [
+]
+
+build = [
+    "CONFIG_SHELL=/bin/bash ./configure --prefix=/usr --sbindir=/usr/bin --libdir=/usr/lib --sysconfdir=/etc --localstatedir=/var --enable-cmdlib --enable-dmeventd --enable-lvmpolld --enable-pkgconfig --enable-readline --enable-udev_rules --enable-udev_sync --enable-write_install --with-cache=internal --with-cache-check= --with-cache-dump= --with-cache-repair= --with-cache-restore= --with-default-dm-run-dir=/run --with-default-locking-dir=/run/lock/lvm --with-default-pid-dir=/run --with-default-run-dir=/run/lvm --with-libexecdir=/usr/lib/lvm2 --with-systemdsystemunitdir=/usr/lib/systemd/system --with-udev-prefix=/usr --with-udevdir=/usr/lib/udev/rules.d --with-thin=internal --with-thin-check= --with-thin-dump= --with-thin-repair= --with-thin-restore=",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make DESTDIR=$DESTDIR install",
+    "sed -i \"s#${SC_BUILD_SYSROOT}/.stage1-tool-wrappers/usr/bin/systemd-run#/usr/bin/systemd-run#g\" $DESTDIR/usr/lib/udev/rules.d/69-dm-lvm.rules",
+    "mkdir -p $DESTDIR/etc/lvm/archive $DESTDIR/etc/lvm/backup",
+]

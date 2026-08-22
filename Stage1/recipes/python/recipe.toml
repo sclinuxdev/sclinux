@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "python"
 version = "3.14.7"
-release = "1"
+release = "2"
 description = "Python 3 programming language (interpreter, stdlib, pip)"
 license = "PSF-2.0"
 channel = "system"
@@ -25,6 +25,7 @@ dependencies = [
     "lz4-libs >= 1.9.0",
     "ncurses-libs >= 6.4",
     "readline >= 8.2",
+    "util-linux-libs >= 2.42.0",
 ]
 
 build_dependencies = [
@@ -42,11 +43,11 @@ prepare = [
 
 build = [
     "CFLAGS=\"$CFLAGS -DOPENSSL_NO_SSL3 -DOPENSSL_NO_SSL3_METHOD -DOPENSSL_NO_TLS1 -DOPENSSL_NO_TLS1_METHOD -DOPENSSL_NO_TLS1_1 -DOPENSSL_NO_TLS1_1_METHOD -DOPENSSL_NO_TLS1_2 -DOPENSSL_NO_TLS1_2_METHOD\" ./configure --prefix=/usr --enable-shared --with-system-expat --without-ensurepip --without-static-libpython",
-    "make -j$(nproc)",
+    'make -j$(nproc) RUNSHARED="LD_LIBRARY_PATH=$PWD:$SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64"',
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    'make install DESTDIR=$DESTDIR RUNSHARED="LD_LIBRARY_PATH=$PWD:$SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64"',
     "mkdir -p $DESTDIR/etc",
     "printf '[global]\\nroot-user-action = ignore\\ndisable-pip-version-check = true\\n' > $DESTDIR/etc/pip.conf",
 ]

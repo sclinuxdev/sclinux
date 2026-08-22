@@ -1,0 +1,38 @@
+diff --git a/meson.build b/meson.build
+index 247c2bc..c81483f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -58,2 +58,2 @@
+-    systemd_system_unit_dir = systemd.get_variable('systemd_system_unit_dir')
+-    tmpfiles_dir = systemd.get_variable('tmpfiles_dir')
++    systemd_system_unit_dir = '/usr/lib/systemd/system'
++    tmpfiles_dir = '/usr/lib/tmpfiles.d'
+@@ -72 +72 @@
+-conf_data.set('UDEVD_PATH', udevd.full_path())
++conf_data.set('UDEVD_PATH', '/usr/lib/systemd/systemd-udevd')
+@@ -74 +74 @@
+-    conf_data.set('TMPFILES_PATH', tmpfiles.full_path())
++    conf_data.set('TMPFILES_PATH', '/usr/bin/systemd-tmpfiles')
+diff --git a/install/systemd b/install/systemd
+index a2ba241..990e551 100755
+--- a/install/systemd
++++ b/install/systemd
+@@ -202,5 +202,6 @@ build() {
+     # Include nvpcr files
+     for nvpcr in /usr/lib/nvpcr/*.nvpcr; do
++        [[ -e "$nvpcr" ]] || continue
+         add_file "$nvpcr"
+     done
+ }
+diff --git a/install/fsck b/install/fsck
+index 74a34e1..d9f40bc 100755
+--- a/install/fsck
++++ b/install/fsck
+@@ -18,6 +18,7 @@ build() {
+                 fi
+                 ;;
+             xfs)
++                add_binary sh
+                 add_binary fsck.xfs
+                 add_binary xfs_repair
+                 ;;

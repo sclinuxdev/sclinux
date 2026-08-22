@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "kbd"
 version = "2.10.0"
-release = "1"
+release = "2"
 description = "Keyboard and console utilities (loadkeys, setfont, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -26,7 +26,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --disable-vlock",
+    "./configure --prefix=/usr --disable-vlock --disable-tests",
     "make -j$(nproc)",
 ]
 

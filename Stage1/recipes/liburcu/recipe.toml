@@ -1,0 +1,39 @@
+schema_version = 1
+
+[package]
+name = "liburcu"
+version = "0.15.6"
+release = "1"
+description = "Userspace RCU library"
+license = "LGPL-2.1-or-later"
+channel = "system"
+
+[source]
+url = "https://lttng.org/files/urcu/userspace-rcu-0.15.6.tar.bz2"
+sha256 = "850b192096eb11ebf2c70e8f97bc7da7479ee41da1bebeb44e3986908bac414f"
+
+dependencies = [
+    "glibc >= 2.44",
+]
+
+build_dependencies = [
+    "gcc >= 15.3.0",
+    "make >= 4.4",
+]
+
+provides = [
+    "liburcu",
+    "so:liburcu.so.8",
+]
+
+prepare = [
+]
+
+build = [
+    "./configure --prefix=/usr --libdir=/usr/lib --disable-static",
+    "make -j$(nproc)",
+]
+
+install = [
+    "make DESTDIR=$DESTDIR install",
+]

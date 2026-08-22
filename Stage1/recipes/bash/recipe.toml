@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "bash"
 version = "5.3"
-release = "2"
+release = "3"
 description = "The GNU Bourne Again SHell"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -30,11 +30,12 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --without-bash-malloc --with-installed-readline",
+    "bash_cv_dev_fd=standard ./configure --prefix=/usr --without-bash-malloc --with-installed-readline",
     "make -j$(nproc)",
 ]
 
 install = [
     "make install DESTDIR=$DESTDIR",
     "ln -sf bash $DESTDIR/usr/bin/sh",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

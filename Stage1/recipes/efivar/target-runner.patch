@@ -1,0 +1,5 @@
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -86 +86 @@ $(MAKEGUIDS_OUTPUT) : guids.txt
+-	./makeguids guids.txt guid-symbols.c include/efivar/efivar-guids.h
++	$(SC_TARGET_RUNNER) ./makeguids guids.txt guid-symbols.c include/efivar/efivar-guids.h

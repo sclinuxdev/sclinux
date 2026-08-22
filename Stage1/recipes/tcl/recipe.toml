@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "tcl"
 version = "8.6.18"
-release = "1"
+release = "2"
 description = "Tool Command Language interpreter"
 license = "TCL"
 channel = "system"
@@ -36,4 +36,5 @@ install = [
     "cd unix && make install-private-headers DESTDIR=$DESTDIR",
     "ln -sfv tclsh8.6 $DESTDIR/usr/bin/tclsh",
     "ln -sfv libtcl8.6.so $DESTDIR/usr/lib/libtcl.so",
+    "mv $DESTDIR/usr/share/man/man3/Thread.3 $DESTDIR/usr/share/man/man3/Tcl_Thread.3",
 ]

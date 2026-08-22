@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "coreutils"
 version = "9.11"
-release = "2"
+release = "4"
 description = "The basic file, shell and text manipulation utilities of the GNU operating system"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -24,13 +24,15 @@ provides = [
 ]
 
 prepare = [
+    "sed -i 's#`$prog $opt 2>$stderr`#`$ENV{SC_TARGET_RUNNER} $prog $opt 2>$stderr`#' man/help2man",
 ]
 
 build = [
-    "FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --enable-install-program=hostname --enable-no-install-program=kill,uptime",
-    "make -j$(nproc)",
+    "FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --without-openssl --enable-install-program=hostname --enable-no-install-program=kill,uptime",
+    "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@; if [ ! -e $TARGET_LOADER ]; then for directory in /lib /lib64 /usr/lib /usr/lib64; do if [ -e $directory/@SC_DYNAMIC_LINKER@ ]; then TARGET_LOADER=$directory/@SC_DYNAMIC_LINKER@; break; fi; done; fi; [ -e $TARGET_LOADER ] || { echo 'ERROR: dynamic loader not found' >&2; exit 1; }; SC_TARGET_RUNNER=\"$TARGET_LOADER --library-path $SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64:$SC_BUILD_SYSROOT/lib:$SC_BUILD_SYSROOT/lib64\" make -j$(nproc)",
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    "TARGET_LOADER=$SC_BUILD_SYSROOT/usr/lib/@SC_DYNAMIC_LINKER@; if [ ! -e $TARGET_LOADER ]; then for directory in /lib /lib64 /usr/lib /usr/lib64; do if [ -e $directory/@SC_DYNAMIC_LINKER@ ]; then TARGET_LOADER=$directory/@SC_DYNAMIC_LINKER@; break; fi; done; fi; [ -e $TARGET_LOADER ] || { echo 'ERROR: dynamic loader not found' >&2; exit 1; }; SC_TARGET_RUNNER=\"$TARGET_LOADER --library-path $SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64:$SC_BUILD_SYSROOT/lib:$SC_BUILD_SYSROOT/lib64\" make install DESTDIR=$DESTDIR cu_install_program=install",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

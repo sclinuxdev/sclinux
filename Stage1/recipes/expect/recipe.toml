@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "expect"
 version = "5.45.4"
-release = "1"
+release = "4"
 description = "Tool for automating interactive applications (expect/tk)"
 license = "Public-domain"
 channel = "system"
@@ -28,11 +28,11 @@ prepare = [
 ]
 
 build = [
-    'CFLAGS="-O2 -std=gnu17 -Wno-implicit-function-declaration -Wno-implicit-int -Wno-incompatible-pointer-types" ./configure --prefix=/usr --with-tcl=/usr/lib --enable-shared --mandir=/usr/share/man --with-tclinclude=/usr/include',
+    'CFLAGS="-O2 -std=gnu17 -Wno-implicit-function-declaration -Wno-implicit-int -Wno-incompatible-pointer-types" ./configure --build=@SC_GNU_TRIPLET@ --prefix=/usr --with-tcl="${SC_BUILD_SYSROOT:-}/usr/lib" --enable-shared --mandir=/usr/share/man --with-tclinclude="${SC_BUILD_SYSROOT:-}/usr/include"',
     "make -j$(nproc)",
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    "make install DESTDIR=$DESTDIR TCLSH_PROG=${SC_BUILD_SYSROOT:-}/.stage1-tool-wrappers/usr/bin/tclsh8.6 TCLSH_ENV=\"env -u LD_LIBRARY_PATH TCL_LIBRARY=${SC_BUILD_SYSROOT:-}/usr/lib/tcl8.6 TCLLIBPATH=.\"",
     "ln -sfv expect5.45.4/libexpect5.45.4.so $DESTDIR/usr/lib/ 2>/dev/null || true",
 ]

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "util-linux"
 version = "2.42.2"
-release = "1"
+release = "3"
 description = "Essential system utilities (mount, umount, fdisk, login, su, kill, ...)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -14,6 +14,7 @@ sha256 = "03a05d3adf9602ef128f2da05b84b3205ce60c351e5737c0370f74000679ce8a"
 
 dependencies = [
     "util-linux-libs >= 2.42.2",
+    "libxcrypt >= 4.5.2",
 ]
 
 provides = [
@@ -24,12 +25,13 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --libdir=/usr/lib --sysconfdir=/etc --disable-static --without-python --without-systemd --disable-makeinstall-chown --without-bash-completion-dir --docdir=/usr/share/doc/util-linux-2.42.2",
+    "./configure --prefix=/usr --bindir=/usr/bin --sbindir=/usr/bin --libdir=/usr/lib --sysconfdir=/etc --disable-static --without-python --without-systemd --disable-makeinstall-chown --without-bash-completion-dir --docdir=/usr/share/doc/util-linux-2.42.2",
     "make -j$(nproc)",
 ]
 
 install = [
     "make install DESTDIR=$DESTDIR",
+    "if [ -d $DESTDIR/usr/sbin ]; then mv $DESTDIR/usr/sbin/* $DESTDIR/usr/bin/; rmdir $DESTDIR/usr/sbin; fi",
     # 拆分：libuuid/libblkid/libmount/libsmartcols 归 util-linux-libs；
     # libfdisk/liblastlog2 等随工具留在本包
     "rm -rf $DESTDIR/usr/include $DESTDIR/usr/lib/pkgconfig",

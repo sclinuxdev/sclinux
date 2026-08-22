@@ -1,0 +1,45 @@
+schema_version = 1
+
+[package]
+name = "gptfdisk"
+version = "1.0.10"
+release = "1"
+description = "GUID Partition Table disk utilities"
+license = "GPL-2.0-only"
+channel = "system"
+
+[source]
+url = "https://downloads.sourceforge.net/project/gptfdisk/gptfdisk/1.0.10/gptfdisk-1.0.10.tar.gz"
+sha256 = "2abed61bc6d2b9ec498973c0440b8b804b7a72d7144069b5a9209b2ad693a282"
+
+dependencies = [
+    "gcc-libs >= 15.3.0",
+    "glibc >= 2.44",
+    "ncurses-libs >= 6.5",
+    "popt >= 1.19",
+    "util-linux-libs >= 2.40",
+]
+
+build_dependencies = [
+    "gcc >= 15.3.0",
+    "make >= 4.4",
+]
+
+provides = [
+    "gptfdisk",
+    "gdisk",
+]
+
+prepare = [
+    "sed -i '/^#include /s:ncursesw/::' gptcurses.cc",
+]
+
+build = [
+    "make -j$(nproc)",
+]
+
+install = [
+    "install -d $DESTDIR/usr/bin $DESTDIR/usr/share/man/man8",
+    "install -m755 gdisk cgdisk sgdisk fixparts $DESTDIR/usr/bin/",
+    "install -m644 gdisk.8 cgdisk.8 sgdisk.8 fixparts.8 $DESTDIR/usr/share/man/man8/",
+]

@@ -3,17 +3,18 @@ schema_version = 1
 [package]
 name = "linux-zen"
 version = "7.1.9"
-release = "1"
+release = "4"
 description = "Linux ZEN kernel with performance optimizations for desktop, multimedia, and gaming"
 license = "GPL-2.0-only"
 channel = "system"
 
 [source]
-url = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.9.tar.xz"
-sha256 = "3271a4ae3897b38352980f2b0975bae61bca81c644d186221c5ae928bcc072b0"
+url = "https://github.com/zen-kernel/zen-kernel/archive/refs/tags/v7.1.9-zen1.tar.gz"
+sha256 = "5ad158486eed44c2c09d948c25cdf60cab2f8515f2efd6df82eb862d5db67ad1"
 
 dependencies = [
     "kmod >= 34.0",
+    "virtual/initramfs-generator",
 ]
 
 build_dependencies = [
@@ -37,31 +38,36 @@ provides = [
 ]
 
 prepare = [
-    "[ -f .prepared ] || zstd -dc ../distfiles/linux-v7.1.9-zen1.patch.zst | patch -p1 --forward --batch || true",
-    "[ -f .prepared ] || cp -v ../config.x86_64 .config",
+    "chmod +x ../make-stage1-kernel.sh",
+    "[ -f .prepared ] || patch -p1 < \"$RECIPE_DIR/objtool-no-procfs.patch\"",
+    "[ -f .prepared ] || cp -v ../config.@SC_ARCH@ .config",
+    "[ -f .prepared ] || sed -i 's#; $(objtool) $(objtool-args)#; $(SC_TARGET_RUNNER) $(objtool) $(objtool-args)#' scripts/Makefile.lib",
     "[ -f .prepared ] || echo '-1' > localversion.10-pkgrel",
     "[ -f .prepared ] || echo '-zen' > localversion.20-pkgname",
+    "[ -f .prepared ] || ./scripts/config --enable BLK_DEV_INITRD --enable DEVTMPFS --enable DEVTMPFS_MOUNT --enable EFI --enable EFI_STUB --enable XFS_FS --enable BLK_DEV_DM --enable DM_THIN_PROVISIONING --enable VIRTIO_PCI --enable VIRTIO_BLK --enable VIRTIO_NET --enable VIRTIO_CONSOLE --enable SCSI_VIRTIO --enable SERIAL_AMBA_PL011 --enable SERIAL_AMBA_PL011_CONSOLE --enable PCI_HOST_GENERIC --enable VFAT_FS",
     "[ -f .prepared ] || ./scripts/config --disable DEBUG_INFO --enable DEBUG_INFO_NONE --disable DEBUG_INFO_DWARF5 --disable DEBUG_INFO_DWARF4 --disable DEBUG_INFO_BTF --disable DEBUG_INFO_BTF_MODULES --disable RUST",
-    "[ -f .prepared ] || make olddefconfig",
+    "[ -f .prepared ] || ../make-stage1-kernel.sh @SC_DYNAMIC_LINKER@ ARCH=@SC_KERNEL_ARCH@ olddefconfig",
     "[ -f .prepared ] || touch .prepared",
 ]
 
 build = [
-    "make -j$(nproc) -k KCFLAGS=\"-Wno-error\" all || make -j$(nproc) KCFLAGS=\"-Wno-error\" all",
+    "../make-stage1-kernel.sh @SC_DYNAMIC_LINKER@ ARCH=@SC_KERNEL_ARCH@ -j$(nproc) -k KCFLAGS=\"-Wno-error\" all || ../make-stage1-kernel.sh @SC_DYNAMIC_LINKER@ ARCH=@SC_KERNEL_ARCH@ -j$(nproc) KCFLAGS=\"-Wno-error\" all",
 ]
 
 install = [
     """
     set -e
-    KVER=$(make -s kernelrelease)
+    KVER=$(../make-stage1-kernel.sh @SC_DYNAMIC_LINKER@ -s ARCH=@SC_KERNEL_ARCH@ kernelrelease)
     echo "Installing kernel release: ${KVER}"
     mkdir -p $DESTDIR/boot $DESTDIR/usr/lib/modules
-    make INSTALL_MOD_PATH=$DESTDIR modules_install
+    ../make-stage1-kernel.sh @SC_DYNAMIC_LINKER@ ARCH=@SC_KERNEL_ARCH@ INSTALL_MOD_PATH=$DESTDIR modules_install
     if [ -d $DESTDIR/lib/modules ] && [ ! -L $DESTDIR/lib ]; then cp -a $DESTDIR/lib/modules $DESTDIR/usr/lib/ && rm -rf $DESTDIR/lib; fi
     rm -f $DESTDIR/usr/lib/modules/$KVER/build $DESTDIR/usr/lib/modules/$KVER/source
-    install -Dm644 arch/x86/boot/bzImage $DESTDIR/boot/vmlinuz-${KVER}
+    install -Dm644 @SC_KERNEL_IMAGE@ $DESTDIR/boot/vmlinuz-${KVER}
     install -Dm644 System.map $DESTDIR/boot/System.map-${KVER}
     install -Dm644 .config $DESTDIR/boot/config-${KVER}
-    install -Dm644 arch/x86/boot/bzImage $DESTDIR/usr/lib/modules/$KVER/vmlinuz
+    install -Dm644 @SC_KERNEL_IMAGE@ $DESTDIR/usr/lib/modules/$KVER/vmlinuz
+    install -d $DESTDIR/etc/mkinitcpio.d
+    printf '%s\\n' 'ALL_config=/etc/mkinitcpio.conf' "ALL_kver=/usr/lib/modules/$KVER/vmlinuz" 'PRESETS=(default)' "default_image=/boot/initramfs-$KVER.img" > $DESTDIR/etc/mkinitcpio.d/linux-zen.preset
     """
 ]

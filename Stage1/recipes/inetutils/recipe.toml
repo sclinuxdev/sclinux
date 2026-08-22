@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "inetutils"
 version = "2.8"
-release = "1"
+release = "6"
 description = "Basic networking utilities (ping, ifconfig, hostname, telnet, ftp, ...)"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -26,13 +26,12 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --bindir=/usr/bin --localstatedir=/var --disable-logger --disable-whois --disable-rcp --disable-rexec --disable-rlogin --disable-rsh --disable-servers --disable-telnet",
+    "inetutils_cv_path_procnet_dev=/proc/net/dev ./configure --prefix=/usr --bindir=/usr/bin --localstatedir=/var --disable-logger --disable-whois --disable-rcp --disable-rexec --disable-rlogin --disable-rsh --disable-servers --disable-telnet",
     "make -j$(nproc)",
 ]
 
 install = [
     "make install DESTDIR=$DESTDIR",
-    "mkdir -p $DESTDIR/usr/sbin",
-    "mv -v $DESTDIR/usr/bin/ifconfig $DESTDIR/usr/sbin/ 2>/dev/null || true",
-    "mv -v $DESTDIR/usr/bin/hostname $DESTDIR/usr/sbin/ 2>/dev/null || true",
+    "rm -f $DESTDIR/usr/bin/hostname $DESTDIR/usr/share/man/man1/hostname.1*",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]

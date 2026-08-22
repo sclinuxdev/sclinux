@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "cmake"
 version = "3.31.6"
-release = "1"
+release = "4"
 description = "Cross-platform open-source build system"
 license = "BSD-3-Clause"
 channel = "system"
@@ -35,13 +35,16 @@ provides = [
 ]
 
 prepare = [
+    "chmod +x ../run-bootstrap-cmake.sh",
+    "sed -i -e 's#^  \\./${TMPFILE}$#  ../../run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ \"./${TMPFILE}\"#' -e 's#^  \\./test$#  ../../../run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ \"./test\"#' bootstrap",
+    "sed -i 's#^\"${cmake_bootstrap_dir}/cmake\" #../run-bootstrap-cmake.sh @SC_DYNAMIC_LINKER@ \"${cmake_bootstrap_dir}/cmake\" #' bootstrap",
 ]
 
 build = [
-    "CFLAGS=\"$CFLAGS -fpermissive\" CXXFLAGS=\"$CXXFLAGS -fpermissive\" ./bootstrap --prefix=/usr --parallel=$(nproc) --system-curl --system-zlib --system-bzip2 --system-zstd --system-liblzma --system-libarchive --system-expat --no-system-jsoncpp --no-system-librhash --no-system-cppdap",
-    "make -j$(nproc)",
+    "env -u CPATH CFLAGS=\"$CFLAGS -fpermissive\" CXXFLAGS=\"$CXXFLAGS -fpermissive\" ./bootstrap --prefix=/usr --parallel=$(nproc) --system-curl --system-zlib --system-bzip2 --system-zstd --system-liblzma --system-libarchive --system-expat --no-system-jsoncpp --no-system-librhash --no-system-cppdap",
+    "env -u CPATH make -j$(nproc)",
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    "env -u CPATH DESTDIR=\"$DESTDIR\" ../run-bootstrap-cmake.sh --direct @SC_DYNAMIC_LINKER@ bin/cmake -P cmake_install.cmake",
 ]

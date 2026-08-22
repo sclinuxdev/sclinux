@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "e2fsprogs-libs"
 version = "1.47.4"
-release = "1"
+release = "2"
 description = "libext2fs/libcom_err/libss/libsupport shared libraries and headers"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -36,4 +36,5 @@ build = [
 
 install = [
     "make install-libs DESTDIR=$DESTDIR",
+    "rm -rf $DESTDIR/usr/bin $DESTDIR/usr/share",
 ]

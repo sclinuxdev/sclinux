@@ -1,0 +1,40 @@
+schema_version = 1
+
+[package]
+name = "efibootmgr"
+version = "18"
+release = "2"
+description = "EFI Boot Manager userspace utility"
+license = "GPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://github.com/rhboot/efibootmgr/archive/refs/tags/18.tar.gz"
+sha256 = "442867d12f8525034a404fc8af3036dba8e1fc970998af2486c3b940dfad0874"
+
+dependencies = [
+    "efivar >= 39",
+    "glibc >= 2.44",
+    "popt >= 1.19",
+]
+
+build_dependencies = [
+    "gcc >= 15.3.0",
+    "make >= 4.4",
+    "pkgconf >= 2.0",
+]
+
+provides = [
+    "efibootmgr",
+]
+
+prepare = [
+]
+
+build = [
+    "make CFLAGS='-O2 -g' libdir=/usr/lib sbindir=/usr/bin EFIDIR=sclinux -j$(nproc)",
+]
+
+install = [
+    "make CFLAGS='-O2 -g' DESTDIR=$DESTDIR libdir=/usr/lib sbindir=/usr/bin EFIDIR=sclinux install",
+]

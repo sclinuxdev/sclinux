@@ -22,6 +22,7 @@ validator = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(validator)
 
 MINIMAL = 'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\n'
+VALID_CHECKSUM = '"' + "a" * 64 + '"'
 
 CASES: list[tuple[str, bool, str]] = [
     (
@@ -32,12 +33,42 @@ CASES: list[tuple[str, bool, str]] = [
     (
         "phases declared in [source] are valid -- sage merges those too",
         True,
-        MINIMAL + '[source]\nurl = "http://e/x.tar"\nsha256 = "abc"\ninstall = [\'echo hi\']\n',
+        MINIMAL + f'[source]\nurl = "http://e/x.tar"\nsha256 = {VALID_CHECKSUM}\ninstall = [\'echo hi\']\n',
     ),
     (
         "a meta-package has no phases, only dependencies (this is `base`)",
         True,
         'schema_version = 1\n[package]\nname = "base"\nversion = "1.0"\ndependencies = ["linux"]\n',
+    ),
+    (
+        "a top-level capability hook is valid",
+        True,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        'exec = "/usr/bin/grub-mkconfig"\nargs = ["-o", "/boot/grub/grub.cfg"]\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
+    ),
+    (
+        "a package-scoped capability hook is valid",
+        True,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\ninstall = ["true"]\n'
+        '[[package.capability_hooks]]\ncapability = "virtual/initramfs-generator"\n'
+        'exec = "/usr/bin/mkinitcpio"\nargs = ["-P"]\n',
+    ),
+    (
+        "a capability hook with a missing executable is rejected",
+        False,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
+    ),
+    (
+        "a capability hook with non-string arguments is rejected",
+        False,
+        'schema_version = 1\ninstall = ["true"]\n'
+        '[[capability_hooks]]\ncapability = "virtual/bootloader"\n'
+        'exec = "/usr/bin/grub-mkconfig"\nargs = [1]\n'
+        '[package]\nname = "x"\nversion = "1.0"\n',
     ),
     (
         "a typo at the top level must not slip through",
@@ -47,12 +78,12 @@ CASES: list[tuple[str, bool, str]] = [
     (
         "a typo in [source] must not slip through",
         False,
-        MINIMAL + 'install = [\'echo hi\']\n[source]\nurl = "http://e/x.tar"\nsha256 = "abc"\nshasum = "typo"\n',
+        MINIMAL + f'install = [\'echo hi\']\n[source]\nurl = "http://e/x.tar"\nsha256 = {VALID_CHECKSUM}\nshasum = "typo"\n',
     ),
     (
         "url must be a string -- an int makes sage skip fetching silently",
         False,
-        MINIMAL + 'install = [\'echo hi\']\n[source]\nurl = 123\nsha256 = "abc"\n',
+        MINIMAL + f'install = [\'echo hi\']\n[source]\nurl = 123\nsha256 = {VALID_CHECKSUM}\n',
     ),
     (
         "sha256 must be a string -- an int makes sage skip verification",
@@ -65,9 +96,24 @@ CASES: list[tuple[str, bool, str]] = [
         'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\nrelease = 1\ninstall = [\'echo hi\']\n',
     ),
     (
+        "an architecture-independent package may use arch any",
+        True,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\narch = "any"\ninstall = [\'echo hi\']\n',
+    ),
+    (
+        "an unknown package architecture is rejected",
+        False,
+        'schema_version = 1\n[package]\nname = "x"\nversion = "1.0"\narch = "mips64"\ninstall = [\'echo hi\']\n',
+    ),
+    (
         "a source url without a checksum is rejected by policy",
         False,
         MINIMAL + 'install = [\'echo hi\']\n[source]\nurl = "http://e/x.tar"\n',
+    ),
+    (
+        "a malformed source checksum is rejected",
+        False,
+        MINIMAL + 'install = [\'echo hi\']\n[source]\nurl = "http://e/x.tar"\nsha256 = "abc"\n',
     ),
     (
         "neither phases nor dependencies means the package does nothing",
@@ -194,7 +240,7 @@ def check_integration_rules() -> tuple[int, int]:
         root = pathlib.Path(tmp)
         old = "recipes/old/recipe.toml"
         new = "recipes/new/recipe.toml"
-        write_recipe(root / old, '"fixed"')
+        write_recipe(root / old, VALID_CHECKSUM)
         write_recipe(root / new, '""')
         result, before, after, _ = run_main(root, {old}, ["--update-debt"])
         checks.append(("updater rejects swapping old debt for new debt", (result, after), (1, before)))
@@ -203,7 +249,7 @@ def check_integration_rules() -> tuple[int, int]:
         root = pathlib.Path(tmp)
         old = "recipes/old/recipe.toml"
         remaining = "recipes/remaining/recipe.toml"
-        write_recipe(root / old, '"fixed"')
+        write_recipe(root / old, VALID_CHECKSUM)
         write_recipe(root / remaining, '""')
         result, _, after, _ = run_main(root, {old, remaining}, ["--update-debt"])
         checks.append((
@@ -253,7 +299,7 @@ def check_integration_rules() -> tuple[int, int]:
         clean = "recipes/clean/recipe.toml"
         old = "recipes/old/recipe.toml"
         new = "recipes/new/recipe.toml"
-        write_recipe(root / clean, '"fixed"')
+        write_recipe(root / clean, VALID_CHECKSUM)
         write_recipe(root / old, '""')
         write_recipe(root / new, '""')
         result, _, _, output = run_main(root, {old}, [])
@@ -272,9 +318,10 @@ def check_integration_rules() -> tuple[int, int]:
             "packages/shc/recipe.toml",
         }
         for rel in expected:
-            write_recipe(root / rel, '"fixed"')
-        write_recipe(root / "packages/shc/src/vendor/recipe.toml", '"fixed"')
-        write_recipe(root / ".git/fixtures/recipe.toml", '"fixed"')
+            write_recipe(root / rel, VALID_CHECKSUM)
+        write_recipe(root / "packages/shc/src/vendor/recipe.toml", VALID_CHECKSUM)
+        write_recipe(root / "out/aarch64/recipes/shc/recipe.toml", VALID_CHECKSUM)
+        write_recipe(root / ".git/fixtures/recipe.toml", VALID_CHECKSUM)
 
         old_repo = validator.REPO
         try:

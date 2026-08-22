@@ -1,0 +1,39 @@
+schema_version = 1
+
+[package]
+name = "libaio"
+version = "0.3.113"
+release = "1"
+description = "Linux native asynchronous I/O library"
+license = "LGPL-2.0-or-later"
+channel = "system"
+
+[source]
+url = "https://releases.pagure.org/libaio/libaio-0.3.113.tar.gz"
+sha256 = "2c44d1c5fd0d43752287c9ae1eb9c023f04ef848ea8d4aafa46e9aedb678200b"
+
+dependencies = [
+    "glibc >= 2.44",
+]
+
+build_dependencies = [
+    "gcc >= 15.3.0",
+    "make >= 4.4",
+]
+
+provides = [
+    "libaio",
+    "so:libaio.so.1",
+]
+
+prepare = [
+    "sed -i 's/-Werror//' harness/Makefile",
+]
+
+build = [
+    "make -j$(nproc)",
+]
+
+install = [
+    "make DESTDIR=$DESTDIR install",
+]

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "binutils"
 version = "2.47"
-release = "2"
+release = "4"
 description = "GNU binary utilities (ld, as, ar, nm, objcopy, strip, etc.)"
 license = "GPL-3.0-or-later"
 channel = "toolchain/gcc:15"
@@ -32,5 +32,7 @@ build = [
 
 install = [
     "cd build && make tooldir=/opt/channels/gcc/15 install DESTDIR=$DESTDIR",
+    "linker_alias=\"$(printf '%s\\n' '@SC_GNU_TRIPLET@' | sed -e 's/-pc-/-/' -e 's/-unknown-/-/')-ld\"; ln -sf ld \"$DESTDIR/opt/channels/gcc/15/bin/$linker_alias\"",
     "rm -fv $DESTDIR/opt/channels/gcc/15/lib/lib{bfd,ctf,ctf-nobfd,gprofng,opcodes,sframe}.a 2>/dev/null || true",
+    "rm -f $DESTDIR/opt/channels/gcc/15/share/info/dir",
 ]

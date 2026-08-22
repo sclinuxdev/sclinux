@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "man-db"
 version = "2.13.1"
-release = "1"
+release = "3"
 description = "Manual page browsing utilities (man, mandb)"
 license = "GPL-2.0-or-later"
 channel = "system"
@@ -29,7 +29,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --docdir=/usr/share/doc/man-db-2.13.1 --sysconfdir=/etc --disable-setuid --enable-cache-owner=bin --with-browser=/usr/bin/lynx --with-vgrind=/usr/bin/vgrind --with-grap=/usr/bin/grap --disable-manual",
+    "./configure --prefix=/usr --sbindir=/usr/bin --docdir=/usr/share/doc/man-db-2.13.1 --sysconfdir=/etc --disable-setuid --enable-cache-owner=bin --with-browser=/usr/bin/lynx --with-vgrind=/usr/bin/vgrind --with-grap=/usr/bin/grap --with-systemdtmpfilesdir=/usr/lib/tmpfiles.d --with-systemdsystemunitdir=/usr/lib/systemd/system --disable-manual",
     "make -j$(nproc)",
 ]
 

@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "groff"
 version = "1.24.1"
-release = "1"
+release = "3"
 description = "GNU troff text formatting system (man page rendering)"
 license = "GPL-3.0-or-later"
 channel = "system"
@@ -32,4 +32,6 @@ build = [
 
 install = [
     "make install DESTDIR=$DESTDIR",
+    "sed -i '1s|^#!.*perl$|#!/usr/bin/perl|' $DESTDIR/usr/bin/mmroff $DESTDIR/usr/bin/gropdf $DESTDIR/usr/bin/pdfmom $DESTDIR/usr/bin/afmtodit $DESTDIR/usr/bin/grog $DESTDIR/usr/bin/chem",
+    "rm -f $DESTDIR/usr/share/info/dir",
 ]
