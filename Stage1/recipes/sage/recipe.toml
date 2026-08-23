@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "sage"
 version = "0.2.0"
-release = "15"
+release = "1"
 description = "Universal Multi-Layer Linux Package Manager"
 license = "BSD-2-Clause"
 channel = "system"
@@ -39,5 +39,5 @@ install = [
 ]
 
 [source]
-url = "https://codeload.github.com/sclinuxdev/sage/tar.gz/fbfc1c67dad107c30cd83323b7894ba1c5882964"
-sha256 = "a7b193cbd31d928020e0d973711637a6e7193582266e4ec2613dc87b1e0b3af4"
+url = "https://codeload.github.com/sclinuxdev/sage/tar.gz/829bd197ccb3f923083908835bb4c5ed93f8e790"
+sha256 = "78993c8bd419311ecc79e1af2fcc6d2ba870d406431571d802f2f745d6d34687"
