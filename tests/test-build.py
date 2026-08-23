@@ -427,6 +427,20 @@ def main() -> int:
             and "mmroff" in groff["source"]["install"][1],
             True,
         )
+        perl_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "perl" / "recipe.toml").read_text()
+        )
+        perl_runtime = (
+            'LDLIBPTH="LD_LIBRARY_PATH=$PWD:$SC_BUILD_SYSROOT/usr/lib:'
+            '$SC_BUILD_SYSROOT/usr/lib64"'
+        )
+        failed += not check(
+            "Stage1 Perl runs generated tools against the target crypt library",
+            perl_recipe["package"]["release"] == "2"
+            and perl_runtime in perl_recipe["source"]["build"][1]
+            and perl_runtime in perl_recipe["source"]["install"][0],
+            True,
+        )
         setuptools_recipe = build.tomllib.loads(
             (REPO / "Stage1" / "recipes" / "setuptools" / "recipe.toml").read_text()
         )
@@ -835,6 +849,16 @@ def main() -> int:
             in coreutils["source"]["install"][0]
             and "cu_install_program=install"
             in coreutils["source"]["install"][0],
+            True,
+        )
+        curl_recipe = build.tomllib.loads(
+            (REPO / "Stage1" / "recipes" / "curl" / "recipe.toml").read_text()
+        )
+        failed += not check(
+            "Stage1 curl excludes unpackaged seed LDAP libraries",
+            curl_recipe["package"]["release"] == "2"
+            and "--disable-ldap" in curl_recipe["source"]["build"][0]
+            and "--disable-ldaps" in curl_recipe["source"]["build"][0],
             True,
         )
         mkinitcpio = build.tomllib.loads(

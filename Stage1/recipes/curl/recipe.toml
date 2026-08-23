@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "curl"
 version = "8.21.0"
-release = "1"
+release = "2"
 description = "Command line tool and library for transferring data with URLs"
 license = "curl"
 channel = "system"
@@ -32,7 +32,7 @@ prepare = [
 ]
 
 build = [
-    "./configure --prefix=/usr --disable-static --with-openssl --with-zlib --with-zstd --without-brotli --without-nghttp2 --without-libpsl --without-libidn2",
+    "./configure --prefix=/usr --disable-static --disable-ldap --disable-ldaps --with-openssl --with-zlib --with-zstd --without-brotli --without-nghttp2 --without-libpsl --without-libidn2",
     "make -j$(nproc)",
 ]
 

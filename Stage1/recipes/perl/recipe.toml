@@ -3,7 +3,7 @@ schema_version = 1
 [package]
 name = "perl"
 version = "5.44.0"
-release = "1"
+release = "2"
 description = "Practical Extraction and Report Language (Perl 5)"
 license = "GPL-1.0-or-later OR Artistic-1.0-Perl"
 channel = "system"
@@ -28,9 +28,9 @@ prepare = [
 
 build = [
     'BUILD_ZLIB=False BUILD_BZIP2=0 sh Configure -de -D prefix=/usr -D vendorprefix=/usr -D privlib=/usr/lib/perl5/5.44/core_perl -D archlib=/usr/lib/perl5/5.44/core_perl -D sitelib=/usr/lib/perl5/5.44/site_perl -D sitearch=/usr/lib/perl5/5.44/site_perl -D vendorlib=/usr/lib/perl5/5.44/vendor_perl -D vendorarch=/usr/lib/perl5/5.44/vendor_perl -D man1dir=/usr/share/man/man1 -D man3dir=/usr/share/man/man3 -D pager="/usr/bin/cat" -D useshrplib -D usethreads -D BUILD_ZLIB=0 -D BUILD_BZIP2=0',
-    "make -j$(nproc)",
+    'make -j$(nproc) LDLIBPTH="LD_LIBRARY_PATH=$PWD:$SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64"',
 ]
 
 install = [
-    "make install DESTDIR=$DESTDIR",
+    'make install DESTDIR=$DESTDIR LDLIBPTH="LD_LIBRARY_PATH=$PWD:$SC_BUILD_SYSROOT/usr/lib:$SC_BUILD_SYSROOT/usr/lib64"',
 ]
