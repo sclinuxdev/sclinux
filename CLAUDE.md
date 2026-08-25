@@ -22,23 +22,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 1. 这个仓库是什么
 
-**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 + aarch64 双架构 Linux 发行版；
-双架构实现由 GitHub PR #4 交付。
-本仓库存放**配方与政策**，不存放源码 tarball，也不存放二进制包。
+**ShenChen Linux (sclinux)** —— 一个从零自举的 x86_64 + aarch64 双架构 Linux 发行版。
 
-| 路径 | 内容 |
+### 事实基准不在本仓库
+
+发行版长什么样、包怎么拆、配方怎么写，**以两个 recipe 仓库为准**：
+
+| 仓库 | 内容 |
 | :--- | :--- |
-| `Stage1/manifest.toml` | 102 包的拓扑构建清单（`batch` 仅为设计分组标记） |
-| `Stage1/recipes/` | 107 个 stage1 配方（在 stage0 chroot 内全量重建） |
-| `Stage2/recipes/` | 178 个 stage2 配方（细粒度拆分 + 完整工具链，原生自举） |
-| `Stage2/build-stage2.sh` | stage2 构建引擎，内嵌 139 项 `BUILD_ORDER` 拓扑序 |
-| `Stage2/_gen_recipes.py` | stage2 配方生成器；**拆分策略的权威实现在此文件的 docstring** |
-| `packages/` | 发行版自有包（目前只有 `shc`） |
-| `scripts/shc` | `sage` 的简写前端，装为 `/usr/bin/shc` |
-| `tests/` | CI 校验器（配方 schema、markdown 链接、shc 行为） |
+| <https://github.com/sclinuxdev/recipes.amd64> | amd64 配方全集 |
+| <https://github.com/sclinuxdev/recipes.aarch64> | aarch64 配方全集 |
 
-包管理器 `sage` 在独立仓库 <https://github.com/sclinuxdev/sage> 开发
-（GitHub `isFork: false`，BSD-2-Clause），不在本仓库内；本仓库是 BSD-3-Clause。
+两棵树包集一致、配方文本除架构相关的值之外应当逐字相同。判断某件事「现在
+是怎么做的」，去读那两个仓库，不要从本仓库推断。
+
+包管理器 `sage` 在 <https://github.com/sclinuxdev/sage> 开发（BSD-2-Clause）；
+本仓库是 BSD-3-Clause。
+
+### 本仓库是什么
+
+**早期自举用的脚手架，以及仍然生效的政策。**
+`Stage0/1/2` 与 `Extra/` 是从零把第一套工具链和第一批包做出来的过程产物，
+**不是规范**。它们已经完成使命：Stage2 与 Extra 的内容早已并入 recipe 仓库。
+
+| 路径 | 内容 | 状态 |
+| :--- | :--- | :--- |
+| `Stage1/manifest.toml` | 102 包的拓扑构建清单 | 历史 |
+| `Stage1/recipes/` | 107 个 stage1 配方 | 历史 |
+| `Stage2/recipes/` | 178 个 stage2 配方 | 历史，已并入 recipe 仓库 |
+| `Stage2/build-stage2.sh` | stage2 构建引擎 | 历史 |
+| `Stage2/_gen_recipes.py` | stage2 配方生成器 | 历史 |
+| `Extra/` | Stage2 部署缺陷的修复树 | 历史，已并入 recipe 仓库 |
+| `packages/`、`scripts/shc` | 发行版自有包 | 历史，已并入 recipe 仓库 |
+| `tests/` | CI 校验器 | **在用** |
+| `config/architectures.toml` | 每架构 21 个字段的渲染表 | **在用** |
+
+**把 Stage 树当史料可以，当规范不行。** 查「某个东西当初为什么长这样、
+迁到 recipe 仓库时丢了什么」，这类考据有效 —— 已经靠它定位过两次
+「配方的另一半没跟过来」（内核的 `scripts/config --enable` 清单、
+mkinitcpio 的默认配置）。但不要用「Stage1 是这么做的」当作改动的理由，
+技术论证要自己站得住。
 
 ---
 
@@ -58,7 +81,7 @@ python3 tests/check-links.py              # markdown 链接与锚点
 python3 tests/validate-recipes.py --update-debt
 
 # —— 构建单个包 ——
-sage build ./packages/shc
+sage build <recipe 目录>                  # 例：recipes.amd64 的 system/shc/shc-1.0.0-1
 sage --root /tmp/sctest install shc       # 永远不要拿 / 做试验
 ```
 
@@ -77,8 +100,9 @@ sage 在 `sha256` 缺失时**直接跳过校验**使用下载内容，等于信�
 
 > a newly added source must ship a checksum -- do not add it to checksum-debt.txt
 
-**当前状态**：全树 286 个配方均通过 schema 校验；凡有 `[source] url` 的配方
-都已有非空 `sha256`，没有待清偿的校验和债务。
+**当前状态**：本仓库树内 315 个配方均通过 schema 校验；凡有 `[source] url` 的
+配方都已有非空 `sha256`，没有待清偿的校验和债务。
+（这是本仓库的历史树。recipe 仓库各有各的校验，同一条硬约束在那边同样成立。）
 
 ---
 
@@ -186,7 +210,8 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 
 ## 5. 包拆分规则
 
-权威表述见 `package-split-channel.md` 与 `Stage2/_gen_recipes.py` 的 docstring。
+规则的完整表述见 `package-split-channel.md`；`Stage2/_gen_recipes.py` 的 docstring
+记录了当初的实现，可作参考，但**实际拆分粒度以两个 recipe 仓库为准**。
 
 1. **纯库**（无独立 CLI 产品）：`name`（SONAME 运行时）+ `name-dev`。
    **不产生 `name-libs`。** 例：zlib、lmdb、gmp、mpfr、readline、libffi、mpdecimal。
@@ -225,7 +250,7 @@ Profile 引擎聚合成 `/etc/sage/profiles/default/{bin,lib,runtimes}` 并生�
 | 架构 | x86_64 + aarch64 双架构 | 高 |
 | 发布模式 | 滚动，不做定版 | 高 |
 
-双架构政策已经裁决；待合并的 GitHub PR #4 就是这次“高代价”变更本身：
+双架构政策已经裁决；GitHub PR #4（已于 2026-08-22 合并）就是这次“高代价”变更本身：
 10 个配方含 38 处 `@SC_*@`
 占位符，`config/architectures.toml` 为每个架构固定 21 个字段，aarch64
 内核配置共 1,987 行，72 条架构断言通过。aarch64 qcow2 已在 AAVMF 下真实启动
@@ -243,9 +268,13 @@ Arch 的约定。但这是可选路径，从上游源码直接写配方同样成
 
 ---
 
-## 7. Stage2 已知缺陷与 Extra 修复
+## 7. Stage2 已知缺陷与 Extra 修复（历史记录）
 
-Stage2 包集部署时暴露的问题，以及 `Extra/` 树的修复状态（2026-08-21）：
+**本节记录的是自举阶段的经过，不反映现状。** `Extra/` 的修复早已并入
+recipe 仓库，此后那两棵树又修了很多这里没有的问题。读它是为了理解某个
+决定的来历，不要据此判断现在哪里还坏着。
+
+Stage2 包集部署时暴露的问题，以及 `Extra/` 树当时的修复状态（2026-08-21）：
 
 | 缺陷 | 修复位置 | 状态 |
 | :--- | :--- | :--- |
