@@ -108,37 +108,52 @@ def main() -> int:
     sha = "a" * 40
     failed += not check(
         "codeload commit archives are recognised as pins",
-        checker.COMMIT_PIN.findall(f'url = "https://codeload.github.com/owner/repo/tar.gz/{sha}"'),
-        [("owner", "repo", sha)],
+        checker.commit_pin(f"https://codeload.github.com/owner/repo/tar.gz/{sha}"),
+        ("owner", "repo", sha),
     )
     failed += not check(
         "github archive commit URLs are recognised as pins",
-        checker.COMMIT_PIN.findall(f'url = "https://github.com/owner/repo/archive/{sha}.tar.gz"'),
-        [("owner", "repo", sha)],
+        checker.commit_pin(f"https://github.com/owner/repo/archive/{sha}.tar.gz"),
+        ("owner", "repo", sha),
     )
     failed += not check(
         "codeload ZIP commit archives are recognised as pins",
-        checker.COMMIT_PIN.findall(f'url = "https://codeload.github.com/owner/repo/zip/{sha}"'),
-        [("owner", "repo", sha)],
+        checker.commit_pin(f"https://codeload.github.com/owner/repo/zip/{sha}"),
+        ("owner", "repo", sha),
+    )
+    failed += not check(
+        "GitHub REST commit archives are recognised as pins",
+        [
+            checker.commit_pin(f"https://api.github.com/repos/owner/repo/tarball/{sha}"),
+            checker.commit_pin(f"https://api.github.com/repos/owner/repo/zipball/{sha}"),
+        ],
+        [("owner", "repo", sha), ("owner", "repo", sha)],
     )
     failed += not check(
         "uppercase commit IDs are recognised as pins",
-        checker.COMMIT_PIN.findall(
-            f'url = "https://codeload.github.com/owner/repo/tar.gz/{sha.upper()}"'
+        checker.commit_pin(
+            f"https://codeload.github.com/owner/repo/tar.gz/{sha.upper()}"
         ),
-        [("owner", "repo", sha.upper())],
+        ("owner", "repo", sha),
     )
     failed += not check(
         "tag and release tarballs are not pins",
-        checker.COMMIT_PIN.findall(
-            'url = "https://github.com/systemd/systemd/archive/refs/tags/v261.2.tar.gz"'
+        checker.commit_pin(
+            "https://github.com/systemd/systemd/archive/refs/tags/v261.2.tar.gz"
         ),
-        [],
+        None,
+    )
+    failed += not check(
+        "hash-shaped tag names are not commit pins",
+        checker.commit_pin(
+            f"https://github.com/owner/repo/archive/refs/tags/{sha}.tar.gz"
+        ),
+        None,
     )
     failed += not check(
         "a short hash is not treated as a commit pin",
-        checker.COMMIT_PIN.findall('url = "https://codeload.github.com/owner/repo/tar.gz/abc1234"'),
-        [],
+        checker.commit_pin("https://codeload.github.com/owner/repo/tar.gz/abc1234"),
+        None,
     )
 
     with tempfile.TemporaryDirectory() as raw:

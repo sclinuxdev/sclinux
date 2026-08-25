@@ -28,12 +28,20 @@ REPO = Path(__file__).resolve().parent.parent
 BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
 GENERATED_TOP_LEVEL_DIRS = {".git", "out"}
 
-# 形如 .../<owner>/<repo>/{tar.gz,zip}/<40 位提交号> 或 .../archive/<40 位提交号>。
-# 只有 40 位提交号算钉：release tarball 与 tag 归档给的是版本号，上游本来就应当持续提供。
-COMMIT_PIN = re.compile(
-    r"https://(?:codeload\.github\.com|github\.com)/([^/]+)/([^/\s]+?)/"
-    r"(?:tar\.gz|zip|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})",
-    re.IGNORECASE,
+# 只认直接以 40 位对象 ID 为 ref 的归档。显式 refs/tags 与 refs/heads 即使名字
+# 长得像哈希也不是提交钉；GitHub 的网页/codeload 与 REST 归档各有一种路径形状。
+COMMIT_PIN_PATTERNS = (
+    re.compile(
+        r"^https://(?:codeload\.github\.com|github\.com)/([^/]+)/([^/\s]+?)/"
+        r"(?:tar\.gz|zip|archive)/([0-9a-f]{40})"
+        r"(?:\.(?:tar\.gz|zip))?(?:[?#].*)?$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^https://api\.github\.com/repos/([^/]+)/([^/\s]+?)/"
+        r"(?:tarball|zipball)/([0-9a-f]{40})(?:[?#].*)?$",
+        re.IGNORECASE,
+    ),
 )
 
 TIMEOUT = 180
@@ -68,18 +76,28 @@ def recipes(root: Path = REPO):
         yield path
 
 
+def commit_pin(url: str) -> tuple[str, str, str] | None:
+    """解析 GitHub 提交归档 URL；tag、branch 与 release URL 返回 None。"""
+    for pattern in COMMIT_PIN_PATTERNS:
+        match = pattern.match(url)
+        if match:
+            owner, repo, commit = match.groups()
+            return owner, repo.removesuffix(".git"), commit.lower()
+    return None
+
+
 def pins(root: Path = REPO):
     """产出全树每一处提交钉：(配方路径, 上游 URL, commit)。"""
     for path in recipes(root):
         source = tomllib.loads(path.read_text()).get("source")
         url = source.get("url") if isinstance(source, dict) else None
-        match = COMMIT_PIN.search(url) if isinstance(url, str) else None
-        if match:
-            owner, repo, commit = match.groups()
+        parsed = commit_pin(url) if isinstance(url, str) else None
+        if parsed:
+            owner, repo, commit = parsed
             yield (
                 path,
-                f"https://github.com/{owner}/{repo.removesuffix('.git')}.git",
-                commit.lower(),
+                f"https://github.com/{owner}/{repo}.git",
+                commit,
             )
 
 
