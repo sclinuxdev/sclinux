@@ -117,6 +117,11 @@ def main() -> int:
         [("owner", "repo", sha)],
     )
     failed += not check(
+        "codeload ZIP commit archives are recognised as pins",
+        checker.COMMIT_PIN.findall(f'url = "https://codeload.github.com/owner/repo/zip/{sha}"'),
+        [("owner", "repo", sha)],
+    )
+    failed += not check(
         "uppercase commit IDs are recognised as pins",
         checker.COMMIT_PIN.findall(
             f'url = "https://codeload.github.com/owner/repo/tar.gz/{sha.upper()}"'
@@ -148,6 +153,9 @@ def main() -> int:
         nested = root / "contrib" / "src" / "foo" / "recipe.toml"
         nested.parent.mkdir(parents=True)
         nested.write_text("")
+        github_fixture = root / ".github" / "fixtures" / "recipe.toml"
+        github_fixture.parent.mkdir(parents=True)
+        github_fixture.write_text("")
         generated = root / "out" / "copy" / "recipe.toml"
         generated.parent.mkdir(parents=True)
         generated.write_text("")
@@ -155,7 +163,7 @@ def main() -> int:
         failed += not check(
             "only actual build product directories are skipped",
             list(checker.recipes(root)),
-            [active, nested],
+            [github_fixture, active, nested],
         )
 
         old_pin = "b" * 40

@@ -26,13 +26,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
-GENERATED_TOP_LEVEL_DIRS = {".git", ".github", "out"}
+GENERATED_TOP_LEVEL_DIRS = {".git", "out"}
 
-# 形如 .../<owner>/<repo>/tar.gz/<40 位提交号> 或 .../archive/<40 位提交号>。
+# 形如 .../<owner>/<repo>/{tar.gz,zip}/<40 位提交号> 或 .../archive/<40 位提交号>。
 # 只有 40 位提交号算钉：release tarball 与 tag 归档给的是版本号，上游本来就应当持续提供。
 COMMIT_PIN = re.compile(
     r"https://(?:codeload\.github\.com|github\.com)/([^/]+)/([^/\s]+?)/"
-    r"(?:tar\.gz|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})",
+    r"(?:tar\.gz|zip|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})",
     re.IGNORECASE,
 )
 
