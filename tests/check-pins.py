@@ -100,9 +100,8 @@ def fetch_default_branch(url: str, workdir: Path) -> None:
         raise Unreachable(f"{url}: {lines[-1] if lines else 'fetch failed'}")
 
 
-def verdict(url: str, commit: str, workdir: Path) -> tuple[bool, str]:
+def verdict(commit: str, workdir: Path) -> tuple[bool, str]:
     """钉住的提交能否从上游默认分支到达。"""
-    fetch_default_branch(url, workdir)
     # 提交图已经取回，对象仍然缺失就说明默认分支根本到不了它 —— 这正是被改写掉的钉
     # 呈现的样子，而不是一次故障。
     if git("cat-file", "-e", f"{commit}^{{commit}}", cwd=workdir).returncode != 0:
@@ -127,28 +126,45 @@ def main(argv: list[str]) -> int:
         print("no commit pins found")
         return 0
 
+    grouped: dict[str, list[tuple[Path, str]]] = {}
+    for path, url, commit in found:
+        grouped.setdefault(url, []).append((path, commit))
+
     failed = 0
     skipped = 0
-    for path, url, commit in found:
-        where = path.relative_to(REPO)
-        short = f"{url.removeprefix('https://github.com/').removesuffix('.git')}@{commit[:7]}"
+    for url, entries in grouped.items():
         try:
             with tempfile.TemporaryDirectory() as scratch:
-                reachable, detail = verdict(url, commit, Path(scratch))
+                workdir = Path(scratch)
+                fetch_default_branch(url, workdir)
+                results = [
+                    (path, commit, *verdict(commit, workdir))
+                    for path, commit in entries
+                ]
         except (Unreachable, subprocess.TimeoutExpired) as error:
-            skipped += 1
-            print(f"SKIP  {where}: cannot reach the upstream ({error})")
+            skipped += len(entries)
+            for path, _ in entries:
+                print(
+                    f"SKIP  {path.relative_to(REPO)}: "
+                    f"cannot reach the upstream ({error})"
+                )
             continue
-        if reachable:
-            print(f"ok    {where} pins {short} ({detail})")
-        else:
-            failed += 1
-            print(
-                f"FAIL  {where} pins {short}\n"
-                f"        {detail} -- the pinned commit is not on the upstream\n"
-                f"        default branch, so its archive URL is not durable.\n"
-                f"        Repin to a commit that branch contains."
+        for path, commit, reachable, detail in results:
+            where = path.relative_to(REPO)
+            short = (
+                f"{url.removeprefix('https://github.com/').removesuffix('.git')}"
+                f"@{commit[:7]}"
             )
+            if reachable:
+                print(f"ok    {where} pins {short} ({detail})")
+            else:
+                failed += 1
+                print(
+                    f"FAIL  {where} pins {short}\n"
+                    f"        {detail} -- the pinned commit is not on the upstream\n"
+                    f"        default branch, so its archive URL is not durable.\n"
+                    f"        Repin to a commit that branch contains."
+                )
 
     print(f"\n{len(found) - failed - skipped} passed, {failed} failed, {skipped} skipped")
     if skipped and args.require_network:

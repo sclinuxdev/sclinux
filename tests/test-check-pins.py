@@ -72,15 +72,13 @@ def main() -> int:
         repo, on_branch, orphaned = upstream(scratch)
         url = str(repo)
 
-        # 钉在默认分支上是唯一可靠的形状。
+        # 同一张取回的提交图可以检查这个上游的多个钉；拆分包不应重复 fetch。
         with tempfile.TemporaryDirectory() as work:
-            reachable, _ = checker.verdict(url, on_branch, pathlib.Path(work))
-        failed += not check("a pin on the default branch passes", reachable, True)
-
-        # 被改写掉的钉：对象在源仓库里还在，但取回的提交图到不了它。这正是 Stage1
-        # 当初钉住那个 Sage 提交的形状。
-        with tempfile.TemporaryDirectory() as work:
-            reachable, detail = checker.verdict(url, orphaned, pathlib.Path(work))
+            workdir = pathlib.Path(work)
+            checker.fetch_default_branch(url, workdir)
+            reachable, _ = checker.verdict(on_branch, workdir)
+            failed += not check("a pin on the default branch passes", reachable, True)
+            reachable, detail = checker.verdict(orphaned, workdir)
         failed += not check("a pin no branch can reach fails", reachable, False)
         failed += not check(
             "the failure says the commit graph does not contain it",
@@ -91,7 +89,9 @@ def main() -> int:
         # 上游取不到是故障，不能读成任何一种判定。
         try:
             with tempfile.TemporaryDirectory() as work:
-                checker.verdict(str(scratch / "absent"), on_branch, pathlib.Path(work))
+                checker.fetch_default_branch(
+                    str(scratch / "absent"), pathlib.Path(work)
+                )
             outage = "no exception"
         except checker.Unreachable:
             outage = "Unreachable"
