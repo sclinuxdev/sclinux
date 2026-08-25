@@ -117,6 +117,13 @@ def main() -> int:
         [("owner", "repo", sha)],
     )
     failed += not check(
+        "uppercase commit IDs are recognised as pins",
+        checker.COMMIT_PIN.findall(
+            f'url = "https://codeload.github.com/owner/repo/tar.gz/{sha.upper()}"'
+        ),
+        [("owner", "repo", sha.upper())],
+    )
+    failed += not check(
         "tag and release tarballs are not pins",
         checker.COMMIT_PIN.findall(
             'url = "https://github.com/systemd/systemd/archive/refs/tags/v261.2.tar.gz"'
@@ -129,12 +136,42 @@ def main() -> int:
         [],
     )
 
-    # 构建产物里带着配方副本，一并遍历会重复报告。
-    failed += not check(
-        "build product directories are skipped",
-        {"pkg", "src", "distfiles", "out"} <= checker.SKIP_DIRS,
-        True,
-    )
+    with tempfile.TemporaryDirectory() as raw:
+        root = pathlib.Path(raw)
+        active = root / "active" / "recipe.toml"
+        active.parent.mkdir()
+        active.write_text("[source]\nurl = 'https://example.invalid/v1.tar.gz'\n")
+        active.with_name("src").mkdir()
+        copied = active.with_name("src") / "copy" / "recipe.toml"
+        copied.parent.mkdir()
+        copied.write_text("")
+        nested = root / "contrib" / "src" / "foo" / "recipe.toml"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("")
+        generated = root / "out" / "copy" / "recipe.toml"
+        generated.parent.mkdir(parents=True)
+        generated.write_text("")
+
+        failed += not check(
+            "only actual build product directories are skipped",
+            list(checker.recipes(root)),
+            [active, nested],
+        )
+
+        old_pin = "b" * 40
+        active.write_text(
+            "# https://codeload.github.com/owner/repo/tar.gz/"
+            + old_pin
+            + "\nprepare = ['echo https://codeload.github.com/owner/repo/tar.gz/"
+            + old_pin
+            + "']\n[source]\n"
+            + "url = 'https://github.com/owner/repo/archive/refs/tags/v1.0.tar.gz'\n"
+        )
+        failed += not check(
+            "comments and build commands are not effective source pins",
+            list(checker.pins(root)),
+            [],
+        )
 
     print(f"\n{checks_run - failed} passed, {failed} failed")
     return 1 if failed else 0

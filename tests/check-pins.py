@@ -21,16 +21,19 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".github", "pkg", "src", "distfiles", "out"}
+BUILD_ARTIFACT_DIRS = {"pkg", "src", "distfiles"}
+GENERATED_TOP_LEVEL_DIRS = {".git", ".github", "out"}
 
 # 形如 .../<owner>/<repo>/tar.gz/<40 位提交号> 或 .../archive/<40 位提交号>。
 # 只有 40 位提交号算钉：release tarball 与 tag 归档给的是版本号，上游本来就应当持续提供。
 COMMIT_PIN = re.compile(
     r"https://(?:codeload\.github\.com|github\.com)/([^/]+)/([^/\s]+?)/"
-    r"(?:tar\.gz|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})"
+    r"(?:tar\.gz|archive(?:/refs/heads|/refs/tags)?)/([0-9a-f]{40})",
+    re.IGNORECASE,
 )
 
 TIMEOUT = 180
@@ -40,18 +43,44 @@ class Unreachable(Exception):
     """取不到上游的提交图 —— 与「取到了但这个钉不在分支上」不是一回事。"""
 
 
-def recipes():
-    for path in sorted(REPO.rglob("recipe.toml")):
-        if SKIP_DIRS & set(path.parts):
+def is_build_artifact(path: Path, root: Path) -> bool:
+    """path 是否位于某个配方自己的 sage build 产物目录。"""
+    for ancestor in path.parents:
+        if ancestor == root:
+            return False
+        if (
+            ancestor.name in BUILD_ARTIFACT_DIRS
+            and (ancestor.parent / "recipe.toml").is_file()
+        ):
+            return True
+    return False
+
+
+def recipes(root: Path = REPO):
+    for path in sorted(root.rglob("recipe.toml")):
+        relative = path.relative_to(root)
+        if relative.parts[0] in GENERATED_TOP_LEVEL_DIRS:
+            continue
+        # sage build 只会在配方目录自身下面创建这些目录。仅凭祖先目录同名就跳过，
+        # 会漏掉 contrib/src/foo/recipe.toml 这类合法配方树。
+        if is_build_artifact(path, root):
             continue
         yield path
 
 
-def pins():
+def pins(root: Path = REPO):
     """产出全树每一处提交钉：(配方路径, 上游 URL, commit)。"""
-    for path in recipes():
-        for owner, repo, commit in COMMIT_PIN.findall(path.read_text()):
-            yield path, f"https://github.com/{owner}/{repo.removesuffix('.git')}.git", commit
+    for path in recipes(root):
+        source = tomllib.loads(path.read_text()).get("source")
+        url = source.get("url") if isinstance(source, dict) else None
+        match = COMMIT_PIN.search(url) if isinstance(url, str) else None
+        if match:
+            owner, repo, commit = match.groups()
+            yield (
+                path,
+                f"https://github.com/{owner}/{repo.removesuffix('.git')}.git",
+                commit.lower(),
+            )
 
 
 def git(*args: str, cwd: Path) -> subprocess.CompletedProcess:
