@@ -197,7 +197,7 @@ def main() -> int:
     sage_helper = (REPO / "Stage1" / "recipes" / "sage" / "shc").read_text()
     failed += not check(
         "Sage package installs the tested SCLinux shorthand wrapper",
-        sage_recipe["package"]["release"] == "1"
+        sage_recipe["package"]["release"] == "16"
         and 'install -Dm755 ../shc "$DESTDIR/usr/bin/shc"'
         in sage_recipe["package"]["install"]
         and sage_helper == (REPO / "scripts" / "shc").read_text(),
