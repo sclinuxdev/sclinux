@@ -67,6 +67,14 @@ def check(description: str, actual: object, expected: object) -> bool:
 def main() -> int:
     failed = 0
 
+    checker_source = (HERE / "check-pins.py").read_text()
+    failed += not check(
+        "upstream fetches request a commit-only graph",
+        '"--filter=tree:0"' in checker_source
+        and '"--filter=blob:none"' not in checker_source,
+        True,
+    )
+
     with tempfile.TemporaryDirectory() as raw:
         scratch = pathlib.Path(raw)
         repo, on_branch, orphaned = upstream(scratch)

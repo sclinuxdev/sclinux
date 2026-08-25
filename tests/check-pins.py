@@ -9,7 +9,7 @@
 本地什么都查不出来，因为配方照样解析、校验和照样匹配缓存里的内容。判据只存在于上游
 仓库的提交图里，所以这里把那张图取回来问 git：钉住的提交是不是默认分支的祖先。
 
-取图用 `--filter=blob:none`，只要提交与树、不要文件内容 —— 一个上游通常几百 KB、一两秒。
+取图用 `--filter=tree:0`，只要提交图、不要 tree 与 blob，避免大型上游拖垮 CI。
 判定用 `git merge-base --is-ancestor`，是 git 自己的祖先语义，不依赖任何 forge 的 API。
 
     python3 tests/check-pins.py                    # 网络不可达时跳过
@@ -112,7 +112,7 @@ def fetch_default_branch(url: str, workdir: Path) -> None:
     if git("init", "-q", ".", cwd=workdir).returncode != 0:
         raise Unreachable("cannot create a scratch repository")
     # HEAD 就是远端的默认分支，不必先问它叫什么名字。
-    fetched = git("fetch", "-q", "--filter=blob:none", url, "HEAD", cwd=workdir)
+    fetched = git("fetch", "-q", "--filter=tree:0", url, "HEAD", cwd=workdir)
     if fetched.returncode != 0:
         lines = fetched.stderr.strip().splitlines()
         raise Unreachable(f"{url}: {lines[-1] if lines else 'fetch failed'}")

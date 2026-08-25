@@ -41,7 +41,7 @@ jobs:
 
       # 被 force-push 或 rebase-merge 改写掉的钉还能下载一阵子，然后开始 404，
       # 据此记录的构建一并失效。判据只在上游的提交图里，所以这一项需要网络：
-      # 用 --filter=blob:none 取回默认分支的图，再由 git 判定祖先关系。
+      # 用 --filter=tree:0 只取默认分支的提交图，再由 git 判定祖先关系。
       - name: upstream pin checker fixtures
         run: python3 tests/test-check-pins.py
 
